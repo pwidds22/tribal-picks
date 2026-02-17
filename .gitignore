@@ -31,7 +31,14 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
 .env*.local
+
+# Claude Code local settings (contains secrets/tokens)
+.claude/settings.local.json
+
+# MCP server config (contains secrets/tokens)
+.mcp.json
 
 # typescript
 *.tsbuildinfo

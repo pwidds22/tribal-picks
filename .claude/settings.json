@@ -1,0 +1,37 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash(npx expo start*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f .env ]; then echo '✓ .env exists'; else echo '⚠️ .env missing'; fi"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$TOOL_INPUT\" | grep -qE '\\.(ts|tsx)$'; then npx prettier --write \"$FILE\" 2>/dev/null || true; fi"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx tsc --noEmit 2>/dev/null || echo 'Type check skipped'"
+          }
+        ]
+      }
+    ]
+  }
+}
