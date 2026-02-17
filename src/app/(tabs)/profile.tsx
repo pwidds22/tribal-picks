@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useLeagueStore } from '../../stores/useLeagueStore';
+import { useMonetizationStore } from '../../stores/useMonetizationStore';
 import AuthPrompt from '../../components/AuthPrompt';
+import Paywall from '../../components/Paywall';
 
 export default function ProfileScreen() {
   const user = useAuthStore((s) => s.user);
@@ -10,6 +13,8 @@ export default function ProfileScreen() {
   const authLoading = useAuthStore((s) => s.isLoading);
   const signOut = useAuthStore((s) => s.signOut);
   const leagueCount = useLeagueStore((s) => s.leagues.length);
+  const isPremium = useMonetizationStore((s) => s.isPremium);
+  const [showPaywall, setShowPaywall] = useState(false);
 
   if (authLoading && !user) {
     return (
@@ -65,10 +70,13 @@ export default function ProfileScreen() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Subscription</Text>
           <Text style={styles.cardDetail}>
-            {profile?.is_premium ? 'Premium (Ad-Free)' : 'Free (with ads)'}
+            {isPremium ? 'Premium (Ad-Free)' : 'Free (with ads)'}
           </Text>
-          {!profile?.is_premium && (
-            <Pressable style={styles.upgradeButton}>
+          {!isPremium && (
+            <Pressable
+              style={styles.upgradeButton}
+              onPress={() => setShowPaywall(true)}
+            >
               <Text style={styles.upgradeText}>Remove Ads</Text>
             </Pressable>
           )}
@@ -78,6 +86,8 @@ export default function ProfileScreen() {
           <Text style={styles.signOutText}>Sign Out</Text>
         </Pressable>
       </View>
+
+      <Paywall visible={showPaywall} onClose={() => setShowPaywall(false)} />
     </SafeAreaView>
   );
 }

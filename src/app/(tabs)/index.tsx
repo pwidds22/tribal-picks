@@ -6,6 +6,7 @@ import { useAuthStore } from '../../stores/useAuthStore';
 import { useLeagueStore } from '../../stores/useLeagueStore';
 import { useSeasonStore } from '../../stores/useSeasonStore';
 import { getMillisUntilLock } from '../../core/locks';
+import AdBanner from '../../components/AdBanner';
 
 export default function HomeScreen() {
   const user = useAuthStore((s) => s.user);
@@ -119,6 +120,7 @@ export default function HomeScreen() {
           </View>
         )}
       </ScrollView>
+      <AdBanner />
     </SafeAreaView>
   );
 }

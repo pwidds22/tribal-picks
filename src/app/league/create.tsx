@@ -11,6 +11,7 @@ import {
 import { router } from 'expo-router';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useLeagueStore } from '../../stores/useLeagueStore';
+import { useMonetizationStore } from '../../stores/useMonetizationStore';
 import { createLeague, getActiveSeason } from '../../services/supabase/queries';
 import type { GameType } from '../../core/types';
 
@@ -35,6 +36,7 @@ export default function CreateLeagueScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const user = useAuthStore((s) => s.user);
   const invalidateLeagues = useLeagueStore((s) => s.invalidate);
+  const showAd = useMonetizationStore((s) => s.showAd);
 
   const handleCreate = async () => {
     if (!user) {
@@ -62,10 +64,12 @@ export default function CreateLeagueScreen() {
         isPublic
       );
 
+      invalidateLeagues();
+      showAd();
       Alert.alert(
         'League Created!',
         `Invite code: ${league.invite_code}\n\nShare this code with friends to join.`,
-        [{ text: 'OK', onPress: () => { invalidateLeagues(); router.replace(`/league/${league.id}`); } }]
+        [{ text: 'OK', onPress: () => { router.replace(`/league/${league.id}`); } }]
       );
     } catch (err: any) {
       Alert.alert('Error', err.message);
