@@ -1,35 +1,106 @@
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { useEffect, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { useAuthStore } from '../../stores/useAuthStore';
+import { useLeagueStore } from '../../stores/useLeagueStore';
+import LeagueCard from '../../components/LeagueCard';
+import AuthPrompt from '../../components/AuthPrompt';
+import type { League } from '../../core/types';
 
 export default function LeaguesScreen() {
+  const user = useAuthStore((s) => s.user);
+  const authLoading = useAuthStore((s) => s.isLoading);
+  const { leagues, isLoading, fetchLeagues, invalidate } = useLeagueStore();
+
+  useEffect(() => {
+    if (user) fetchLeagues(user.id);
+  }, [user]);
+
+  const handleRefresh = useCallback(() => {
+    if (user) {
+      invalidate();
+      fetchLeagues(user.id);
+    }
+  }, [user]);
+
+  if (!user && !authLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <AuthPrompt message="Sign in to create and join leagues" />
+      </SafeAreaView>
+    );
+  }
+
+  if (isLoading && !leagues.length) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#e94560" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const renderHeader = () => (
+    <View>
+      <Text style={styles.title}>My Leagues</Text>
+      <View style={styles.buttonRow}>
+        <Pressable
+          style={[styles.button, styles.primaryButton]}
+          onPress={() => router.push('/league/create')}
+        >
+          <Text style={styles.buttonText}>Create League</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.button, styles.secondaryButton]}
+          onPress={() => router.push('/league/join')}
+        >
+          <Text style={styles.buttonText}>Join League</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+
+  const renderEmpty = () => (
+    <View style={styles.emptyState}>
+      <Text style={styles.emptyText}>No leagues yet</Text>
+      <Text style={styles.emptySubtext}>
+        Create a league or join one with an invite code
+      </Text>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.title}>My Leagues</Text>
-
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>No leagues yet</Text>
-          <Text style={styles.emptySubtext}>
-            Create a league or join one with an invite code
-          </Text>
-        </View>
-
-        <View style={styles.buttonRow}>
-          <Pressable
-            style={[styles.button, styles.primaryButton]}
-            onPress={() => router.push('/league/create')}
-          >
-            <Text style={styles.buttonText}>Create League</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.button, styles.secondaryButton]}
-            onPress={() => router.push('/league/join')}
-          >
-            <Text style={styles.buttonText}>Join League</Text>
-          </Pressable>
-        </View>
-      </View>
+      <FlatList<League>
+        data={leagues}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <LeagueCard
+            league={item}
+            onPress={() => router.push(`/league/${item.id}`)}
+          />
+        )}
+        ListHeaderComponent={renderHeader}
+        ListEmptyComponent={renderEmpty}
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={isLoading}
+            onRefresh={handleRefresh}
+            tintColor="#e94560"
+          />
+        }
+      />
     </SafeAreaView>
   );
 }
@@ -39,35 +110,25 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0f0f23',
   },
-  content: {
+  center: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  content: {
     padding: 20,
+    flexGrow: 1,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#ffffff',
-    marginBottom: 20,
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 18,
-    color: '#ffffff',
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#a0a0a0',
-    textAlign: 'center',
+    marginBottom: 16,
   },
   buttonRow: {
     flexDirection: 'row',
     gap: 12,
-    paddingBottom: 20,
+    marginBottom: 20,
   },
   button: {
     flex: 1,
@@ -87,5 +148,20 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  emptyState: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 60,
+  },
+  emptyText: {
+    fontSize: 18,
+    color: '#ffffff',
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#a0a0a0',
+    textAlign: 'center',
   },
 });

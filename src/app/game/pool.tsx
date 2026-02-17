@@ -19,6 +19,7 @@ import {
   getSurvivorPoolStatus,
 } from '../../services/supabase/queries';
 import { getUsedCastaways } from '../../core/scoring';
+import { isEpisodeLocked, getLockDeadlineLabel } from '../../core/locks';
 import type { Castaway, Episode } from '../../core/types';
 
 export default function SurvivorPoolScreen() {
@@ -33,6 +34,7 @@ export default function SurvivorPoolScreen() {
   const [poolStatus, setPoolStatus] = useState<
     { user_id: string; is_alive: boolean; username: string }[]
   >([]);
+  const [isLocked, setIsLocked] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -52,6 +54,9 @@ export default function SurvivorPoolScreen() {
 
       setCastaways(allCastaways.filter((c) => !c.is_eliminated));
       setNextEpisode(episode);
+      if (episode) {
+        setIsLocked(isEpisodeLocked(episode.air_date));
+      }
 
       if (leagueId && user) {
         const [picks, status] = await Promise.all([
@@ -91,12 +96,12 @@ export default function SurvivorPoolScreen() {
   );
 
   const handleSelect = (castawayId: number) => {
-    if (!isAlive) return;
+    if (!isAlive || isLocked) return;
     setSelectedId(castawayId === selectedId ? null : castawayId);
   };
 
   const handleSave = async () => {
-    if (!leagueId || !user || !nextEpisode || selectedId === null) return;
+    if (!leagueId || !user || !nextEpisode || selectedId === null || isLocked) return;
 
     setIsSaving(true);
     try {
@@ -147,7 +152,9 @@ export default function SurvivorPoolScreen() {
           Episode {nextEpisode?.number ?? '?'}
         </Text>
         <Text style={styles.headerSubtext}>
-          Pick one castaway who will SURVIVE this episode
+          {isLocked
+            ? 'Picks are locked for this episode'
+            : 'Pick one castaway who will SURVIVE this episode'}
         </Text>
         <View style={styles.statusBar}>
           <Text style={styles.statusAlive}>{aliveCount} alive</Text>
@@ -206,7 +213,7 @@ export default function SurvivorPoolScreen() {
         />
       )}
 
-      {selectedId !== null && (
+      {selectedId !== null && !isLocked && (
         <Pressable
           style={[styles.saveButton, isSaving && styles.buttonDisabled]}
           onPress={handleSave}

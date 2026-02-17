@@ -16,6 +16,7 @@ import {
   saveBracketPicks,
   getBracketPicks,
 } from '../../services/supabase/queries';
+import { isBracketLocked, getLockDeadlineLabel } from '../../core/locks';
 import type { Castaway } from '../../core/types';
 
 export default function BracketScreen() {
@@ -36,6 +37,8 @@ export default function BracketScreen() {
       const season = await getActiveSeason();
       if (!season) return;
 
+      setIsLocked(isBracketLocked(season.premiere_date));
+
       const allCastaways = await getCastaways(season.id);
       setCastaways(allCastaways);
 
@@ -48,7 +51,6 @@ export default function BracketScreen() {
             .sort((a, b) => a.predicted_position - b.predicted_position)
             .map((p) => p.castaway_id);
           setOrderedIds(savedOrder);
-          // TODO: Check if picks are locked (season started)
         } else {
           setOrderedIds(allCastaways.map((c) => c.id));
         }
@@ -118,8 +120,9 @@ export default function BracketScreen() {
     <View style={styles.container}>
       <View style={styles.instructions}>
         <Text style={styles.instructionText}>
-          Order castaways from first eliminated (#1) to Sole Survivor (last).
-          Use arrows to reorder.
+          {isLocked
+            ? 'Brackets are locked. Good luck this season!'
+            : 'Order castaways from first eliminated (#1) to Sole Survivor (last). Use arrows to reorder.'}
         </Text>
       </View>
 
