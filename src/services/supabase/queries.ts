@@ -3,7 +3,6 @@ import type {
   Season,
   Castaway,
   League,
-  LeagueMember,
   Episode,
   BracketPick,
   SurvivorPoolPick,
@@ -92,27 +91,25 @@ export async function createLeague(
 export async function joinLeague(
   leagueId: string,
   userId: string
-): Promise<LeagueMember> {
-  const { data, error } = await supabase
+): Promise<void> {
+  const { error } = await supabase
     .from('league_members')
-    .insert({ league_id: leagueId, user_id: userId })
-    .select()
-    .single();
+    .insert({ league_id: leagueId, user_id: userId });
 
   if (error) throw error;
-  return data;
 }
 
 export async function joinLeagueByCode(
   inviteCode: string,
   userId: string
 ): Promise<League> {
-  const { data: league, error } = await supabase
+  const { data, error } = await supabase
     .rpc('lookup_league_by_invite_code', { p_invite_code: inviteCode })
     .single();
 
-  if (error || !league) throw new Error('League not found. Check the invite code.');
+  if (error || !data) throw new Error('League not found. Check the invite code.');
 
+  const league = data as unknown as League;
   await joinLeague(league.id, userId);
   return league;
 }
