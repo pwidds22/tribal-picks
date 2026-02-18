@@ -8,6 +8,8 @@ import {
 
 // ============================================
 // Pure scoring functions — no side effects
+// NOTE: These functions are duplicated in the Supabase Edge Function
+// `sync-results/index.ts` for server-side scoring. Keep both in sync!
 // ============================================
 
 /**

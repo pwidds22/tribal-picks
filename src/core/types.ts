@@ -111,6 +111,24 @@ export type SurvivorPoolPick = {
   is_alive: boolean;          // still in the pool?
 };
 
+// ---------- Admin / Sync Types ----------
+
+export type NameAlias = {
+  id: number;
+  castaway_id: number;
+  alias: string;
+};
+
+export type SyncLog = {
+  id: number;
+  ran_at: string;
+  trigger_source: string;
+  episodes_updated: number;
+  picks_scored: number;
+  errors: string[] | null;
+  wiki_hash: string | null;
+};
+
 // ---------- App State Types ----------
 
 export type LeagueWithMembers = League & {
