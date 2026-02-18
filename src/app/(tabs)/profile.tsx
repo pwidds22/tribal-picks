@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from 'expo-router';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useLeagueStore } from '../../stores/useLeagueStore';
 import { useMonetizationStore } from '../../stores/useMonetizationStore';
@@ -14,7 +15,15 @@ export default function ProfileScreen() {
   const signOut = useAuthStore((s) => s.signOut);
   const leagueCount = useLeagueStore((s) => s.leagues.length);
   const isPremium = useMonetizationStore((s) => s.isPremium);
+  const refreshStatus = useMonetizationStore((s) => s.refreshStatus);
   const [showPaywall, setShowPaywall] = useState(false);
+
+  // Refresh premium status each time profile screen gains focus
+  useFocusEffect(
+    useCallback(() => {
+      refreshStatus();
+    }, [refreshStatus])
+  );
 
   if (authLoading && !user) {
     return (

@@ -12,9 +12,11 @@ import {
   restorePurchases,
 } from '../services/revcat/subscriptions';
 import { preloadInterstitial, showInterstitial } from '../services/admob/ads';
+import { AD_UNIT_IDS } from '../services/admob/client';
 
 type MonetizationState = {
   isPremium: boolean;
+  bannerUnitId: string;
   offerings: PurchasesPackage[];
   isLoading: boolean;
   error: string | null;
@@ -31,6 +33,7 @@ type MonetizationState = {
 
 export const useMonetizationStore = create<MonetizationState>((set, get) => ({
   isPremium: false,
+  bannerUnitId: AD_UNIT_IDS.BANNER,
   offerings: [],
   isLoading: false,
   error: null,
@@ -40,7 +43,6 @@ export const useMonetizationStore = create<MonetizationState>((set, get) => ({
     const isPremium = await checkPremiumStatus();
     set({ isPremium });
 
-    // Preload interstitial for free users
     if (!isPremium) {
       preloadInterstitial();
     }
@@ -82,7 +84,6 @@ export const useMonetizationStore = create<MonetizationState>((set, get) => ({
       set({ isPremium, isLoading: false });
       return isPremium;
     } catch (err: any) {
-      // User cancelled purchase is not an error
       if (err.userCancelled) {
         set({ isLoading: false });
         return false;

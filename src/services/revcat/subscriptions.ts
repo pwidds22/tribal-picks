@@ -15,12 +15,8 @@ export async function checkPremiumStatus(): Promise<boolean> {
 }
 
 export async function getOfferings(): Promise<PurchasesPackage[]> {
-  try {
-    const offerings = await Purchases.getOfferings();
-    return offerings.current?.availablePackages ?? [];
-  } catch {
-    return [];
-  }
+  const offerings = await Purchases.getOfferings();
+  return offerings.current?.availablePackages ?? [];
 }
 
 export async function purchasePackage(

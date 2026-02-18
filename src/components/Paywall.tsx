@@ -24,14 +24,14 @@ export default function Paywall({ visible, onClose }: PaywallProps) {
       loadOfferings();
       clearError();
     }
-  }, [visible]);
+  }, [visible, loadOfferings, clearError]);
 
   // Auto-close on successful purchase
   useEffect(() => {
     if (isPremium && visible) {
       onClose();
     }
-  }, [isPremium, visible]);
+  }, [isPremium, visible, onClose]);
 
   const handlePurchase = async (pkg: PurchasesPackage) => {
     await purchase(pkg);

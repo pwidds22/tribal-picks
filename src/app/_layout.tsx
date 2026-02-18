@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useAuthStore } from '../stores/useAuthStore';
@@ -10,21 +10,32 @@ export default function RootLayout() {
   const initMonetization = useMonetizationStore((s) => s.initialize);
   const syncUser = useMonetizationStore((s) => s.syncUser);
   const syncLogout = useMonetizationStore((s) => s.syncLogout);
+  const prevUserId = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
     const unsubscribe = initialize();
-    initMonetization();
     return unsubscribe;
   }, [initialize]);
 
-  // Sync RevenueCat user when auth changes
+  // Single effect handles both init and auth changes.
+  // On first render prevUserId is undefined — we initialize with current userId.
+  // On subsequent changes we sync login/logout.
   useEffect(() => {
+    if (prevUserId.current === undefined) {
+      // First run — configure RevenueCat with userId if available
+      prevUserId.current = user?.id ?? null;
+      initMonetization(user?.id);
+      return;
+    }
+
+    // Auth state actually changed
     if (user) {
       syncUser(user.id);
     } else {
       syncLogout();
     }
-  }, [user?.id]);
+    prevUserId.current = user?.id ?? null;
+  }, [user?.id, initMonetization, syncUser, syncLogout]);
 
   return (
     <>

@@ -65,11 +65,16 @@ export default function CreateLeagueScreen() {
       );
 
       invalidateLeagues();
-      showAd();
       Alert.alert(
         'League Created!',
         `Invite code: ${league.invite_code}\n\nShare this code with friends to join.`,
-        [{ text: 'OK', onPress: () => { router.replace(`/league/${league.id}`); } }]
+        [{
+          text: 'OK',
+          onPress: () => {
+            showAd();
+            router.replace(`/league/${league.id}`);
+          },
+        }]
       );
     } catch (err: any) {
       Alert.alert('Error', err.message);
