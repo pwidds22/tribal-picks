@@ -2,13 +2,14 @@ import Purchases from 'react-native-purchases';
 import { Platform } from 'react-native';
 
 const REVCAT_IOS_API_KEY = process.env.EXPO_PUBLIC_REVCAT_IOS_API_KEY ?? '';
+const isValidKey = REVCAT_IOS_API_KEY.startsWith('appl_');
 
 let initialized = false;
 
 export function configureRevenueCat(userId?: string): void {
   if (initialized) return;
-  if (!REVCAT_IOS_API_KEY) {
-    console.warn('RevenueCat API key missing. Set EXPO_PUBLIC_REVCAT_IOS_API_KEY in .env');
+  if (!isValidKey) {
+    console.warn('RevenueCat: No valid API key (expected appl_...). Subscriptions disabled.');
     return;
   }
 

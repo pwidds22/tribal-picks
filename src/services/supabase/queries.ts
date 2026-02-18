@@ -291,6 +291,42 @@ export async function getSurvivorPoolStatus(
 }
 
 // ============================================
+// Standings / Leaderboard
+// ============================================
+
+export async function getBracketStandings(
+  leagueId: string
+): Promise<
+  { user_id: string; username: string; display_name: string | null; total_points: number }[]
+> {
+  const { data, error } = await supabase.rpc('get_bracket_standings', {
+    p_league_id: leagueId,
+  });
+
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function getSurvivorPoolStandings(
+  leagueId: string
+): Promise<
+  {
+    user_id: string;
+    username: string;
+    display_name: string | null;
+    is_alive: boolean;
+    eliminated_in_episode: number | null;
+  }[]
+> {
+  const { data, error } = await supabase.rpc('get_survivor_pool_standings', {
+    p_league_id: leagueId,
+  });
+
+  if (error) throw error;
+  return data ?? [];
+}
+
+// ============================================
 // Helpers
 // ============================================
 

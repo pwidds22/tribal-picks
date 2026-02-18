@@ -150,6 +150,15 @@ export type LeaderboardEntry = {
   rank: number;
 };
 
+export type SurvivorPoolStandingEntry = {
+  user_id: string;
+  username: string;
+  display_name: string | null;
+  is_alive: boolean;
+  eliminated_in_episode: number | null;
+  rank: number;
+};
+
 // ---------- Scoring Constants ----------
 
 export const BRACKET_SCORING = {

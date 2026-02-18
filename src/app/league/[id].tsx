@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   Pressable,
   ActivityIndicator,
   Share,
@@ -11,16 +10,32 @@ import {
 import { useLocalSearchParams, router } from 'expo-router';
 import {
   getLeague,
-  getLeagueMembers,
+  getBracketStandings,
+  getSurvivorPoolStandings,
 } from '../../services/supabase/queries';
-import type { League } from '../../core/types';
+import {
+  assignBracketRanks,
+  assignSurvivorPoolRanks,
+} from '../../core/standings';
+import { useAuthStore } from '../../stores/useAuthStore';
+import Leaderboard from '../../components/Leaderboard';
+import type {
+  League,
+  LeaderboardEntry,
+  SurvivorPoolStandingEntry,
+} from '../../core/types';
 
 export default function LeagueDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const user = useAuthStore((s) => s.user);
   const [league, setLeague] = useState<League | null>(null);
-  const [members, setMembers] = useState<
-    { user_id: string; username: string; display_name: string | null }[]
+  const [bracketStandings, setBracketStandings] = useState<LeaderboardEntry[]>(
+    []
+  );
+  const [poolStandings, setPoolStandings] = useState<
+    SurvivorPoolStandingEntry[]
   >([]);
+  const [memberCount, setMemberCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -30,12 +45,22 @@ export default function LeagueDetailScreen() {
 
   const loadLeague = async () => {
     try {
-      const [leagueData, memberData] = await Promise.all([
-        getLeague(id!),
-        getLeagueMembers(id!),
-      ]);
+      const leagueData = await getLeague(id!);
       setLeague(leagueData);
-      setMembers(memberData);
+
+      if (!leagueData) return;
+
+      if (leagueData.game_type === 'bracket') {
+        const raw = await getBracketStandings(id!);
+        const ranked = assignBracketRanks(raw);
+        setBracketStandings(ranked);
+        setMemberCount(ranked.length);
+      } else if (leagueData.game_type === 'survivor_pool') {
+        const raw = await getSurvivorPoolStandings(id!);
+        const ranked = assignSurvivorPoolRanks(raw);
+        setPoolStandings(ranked);
+        setMemberCount(ranked.length);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -102,24 +127,21 @@ export default function LeagueDetailScreen() {
         </Pressable>
       </View>
 
-      <Text style={styles.sectionTitle}>
-        Members ({members.length})
-      </Text>
-      <FlatList
-        data={members}
-        keyExtractor={(item) => item.user_id}
-        renderItem={({ item, index }) => (
-          <View style={styles.memberRow}>
-            <Text style={styles.memberRank}>#{index + 1}</Text>
-            <Text style={styles.memberName}>
-              {item.display_name ?? item.username}
-            </Text>
-          </View>
-        )}
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>No members yet</Text>
-        }
-      />
+      <Text style={styles.sectionTitle}>Standings ({memberCount})</Text>
+
+      {league.game_type === 'bracket' ? (
+        <Leaderboard
+          gameType="bracket"
+          entries={bracketStandings}
+          currentUserId={user?.id ?? null}
+        />
+      ) : league.game_type === 'survivor_pool' ? (
+        <Leaderboard
+          gameType="survivor_pool"
+          entries={poolStandings}
+          currentUserId={user?.id ?? null}
+        />
+      ) : null}
     </View>
   );
 }
@@ -213,28 +235,5 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     paddingHorizontal: 20,
     marginBottom: 12,
-  },
-  memberRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1a1a2e',
-  },
-  memberRank: {
-    color: '#e94560',
-    fontSize: 16,
-    fontWeight: 'bold',
-    width: 40,
-  },
-  memberName: {
-    color: '#ffffff',
-    fontSize: 16,
-  },
-  emptyText: {
-    color: '#a0a0a0',
-    textAlign: 'center',
-    padding: 20,
   },
 });

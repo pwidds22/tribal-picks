@@ -15,7 +15,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.tribalpicks.survivorfantasy"
+      "bundleIdentifier": "com.tribalpicks.survivorfantasy",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "plugins": [
       "expo-router",
@@ -29,6 +32,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "77491817-6fed-4197-9e2d-28c74bcb8d8a"
+      }
+    },
+    "owner": "pwidds"
   }
 }
