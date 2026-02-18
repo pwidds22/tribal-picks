@@ -108,9 +108,7 @@ export async function joinLeagueByCode(
   userId: string
 ): Promise<League> {
   const { data: league, error } = await supabase
-    .from('leagues')
-    .select('*')
-    .eq('invite_code', inviteCode.toUpperCase())
+    .rpc('lookup_league_by_invite_code', { p_invite_code: inviteCode })
     .single();
 
   if (error || !league) throw new Error('League not found. Check the invite code.');
