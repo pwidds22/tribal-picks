@@ -155,10 +155,12 @@ function GameTypeCard({
   option,
   selected,
   onSelect,
+  startEpisode = 1,
 }: {
   option: GameTypeOption;
   selected: boolean;
   onSelect: () => void;
+  startEpisode?: number;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -284,7 +286,9 @@ function GameTypeCard({
               >
                 SCORING
               </Text>
-              {option.scoringPreview.map((line, i) => (
+              {option.scoringPreview
+                .filter((line) => !(startEpisode > 1 && line.includes('First boot')))
+                .map((line, i) => (
                 <View key={i} style={cardStyles.scoreLine}>
                   <Ionicons
                     name="checkmark-circle"
@@ -461,6 +465,7 @@ export default function CreateLeagueScreen() {
           option={gt}
           selected={gameType === gt.value}
           onSelect={() => setGameType(gt.value)}
+          startEpisode={startEpisode}
         />
       ))}
 

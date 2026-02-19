@@ -68,6 +68,7 @@ export default function LeagueDetailScreen() {
       }
     } catch (err) {
       console.error(err);
+      Alert.alert('Error', 'Failed to load league data. Please try again.');
     } finally {
       setIsLoading(false);
     }

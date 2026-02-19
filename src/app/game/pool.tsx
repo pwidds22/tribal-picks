@@ -114,6 +114,7 @@ export default function SurvivorPoolScreen() {
       }
     } catch (err) {
       console.error(err);
+      Alert.alert('Error', 'Failed to load pool data. Please try again.');
     } finally {
       setIsLoading(false);
     }

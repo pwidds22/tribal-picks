@@ -410,7 +410,7 @@ export default function BracketScreen() {
         setIsLocked(isBracketLocked(season.premiere_date));
       } else {
         const episode = await getEpisodeByNumber(season.id, startEp);
-        setIsLocked(episode ? isEpisodeLocked(episode.air_date) : false);
+        setIsLocked(episode ? isEpisodeLocked(episode.air_date) : true);
       }
 
       // Load castaways — filter to alive at start episode if mid-season
@@ -435,6 +435,7 @@ export default function BracketScreen() {
       }
     } catch (err) {
       console.error(err);
+      Alert.alert('Error', 'Failed to load bracket data. Please try again.');
     } finally {
       setIsLoading(false);
     }
