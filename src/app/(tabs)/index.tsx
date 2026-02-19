@@ -7,7 +7,6 @@ import { useAuthStore } from '../../stores/useAuthStore';
 import { useLeagueStore } from '../../stores/useLeagueStore';
 import { useSeasonStore } from '../../stores/useSeasonStore';
 import { getMillisUntilLock } from '../../core/locks';
-import AdBanner from '../../components/AdBanner';
 import type { League, GameType } from '../../core/types';
 
 // ---------- Constants ----------
@@ -470,7 +469,6 @@ export default function HomeScreen() {
           </View>
         )}
       </ScrollView>
-      <AdBanner />
     </SafeAreaView>
   );
 }

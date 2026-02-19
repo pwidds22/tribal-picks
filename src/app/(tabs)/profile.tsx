@@ -1,12 +1,12 @@
-import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useLeagueStore } from '../../stores/useLeagueStore';
-import { useMonetizationStore } from '../../stores/useMonetizationStore';
 import AuthPrompt from '../../components/AuthPrompt';
-import Paywall from '../../components/Paywall';
+
+const PRIVACY_URL = 'https://peat-bow-b31.notion.site/Tribal-Picks-Privacy-Policy-30ca029843928019bbf8f0c48d82f5f3';
+const TERMS_URL = 'https://peat-bow-b31.notion.site/Tribal-Picks-Terms-of-Use-30ca0298439280429aace6969ed81831';
 
 export default function ProfileScreen() {
   const user = useAuthStore((s) => s.user);
@@ -14,16 +14,6 @@ export default function ProfileScreen() {
   const authLoading = useAuthStore((s) => s.isLoading);
   const signOut = useAuthStore((s) => s.signOut);
   const leagueCount = useLeagueStore((s) => s.leagues.length);
-  const isPremium = useMonetizationStore((s) => s.isPremium);
-  const refreshStatus = useMonetizationStore((s) => s.refreshStatus);
-  const [showPaywall, setShowPaywall] = useState(false);
-
-  // Refresh premium status each time profile screen gains focus
-  useFocusEffect(
-    useCallback(() => {
-      refreshStatus();
-    }, [refreshStatus])
-  );
 
   if (authLoading && !user) {
     return (
@@ -77,26 +67,27 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Subscription</Text>
-          <Text style={styles.cardDetail}>
-            {isPremium ? 'Premium (Ad-Free)' : 'Free (with ads)'}
-          </Text>
-          {!isPremium && (
-            <Pressable
-              style={styles.upgradeButton}
-              onPress={() => setShowPaywall(true)}
-            >
-              <Text style={styles.upgradeText}>Remove Ads</Text>
-            </Pressable>
-          )}
+          <Text style={styles.cardTitle}>Legal</Text>
+          <Pressable
+            style={styles.linkRow}
+            onPress={() => Linking.openURL(PRIVACY_URL)}
+          >
+            <Text style={styles.linkText}>Privacy Policy</Text>
+            <Ionicons name="open-outline" size={16} color="#a0a0a0" />
+          </Pressable>
+          <Pressable
+            style={styles.linkRow}
+            onPress={() => Linking.openURL(TERMS_URL)}
+          >
+            <Text style={styles.linkText}>Terms of Use</Text>
+            <Ionicons name="open-outline" size={16} color="#a0a0a0" />
+          </Pressable>
         </View>
 
         <Pressable style={styles.signOutButton} onPress={signOut}>
           <Text style={styles.signOutText}>Sign Out</Text>
         </Pressable>
       </View>
-
-      <Paywall visible={showPaywall} onClose={() => setShowPaywall(false)} />
     </SafeAreaView>
   );
 }
@@ -133,11 +124,6 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     marginBottom: 12,
   },
-  cardDetail: {
-    fontSize: 14,
-    color: '#a0a0a0',
-    marginBottom: 16,
-  },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -155,18 +141,17 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '600',
   },
-  upgradeButton: {
-    backgroundColor: '#16213e',
-    borderWidth: 1,
-    borderColor: '#e94560',
-    paddingVertical: 12,
-    borderRadius: 8,
+  linkRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a4e',
   },
-  upgradeText: {
-    color: '#e94560',
-    fontWeight: 'bold',
-    fontSize: 16,
+  linkText: {
+    fontSize: 14,
+    color: '#a0a0a0',
   },
   signOutButton: {
     backgroundColor: '#2a2a4e',

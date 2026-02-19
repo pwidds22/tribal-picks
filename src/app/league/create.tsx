@@ -13,7 +13,6 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useLeagueStore } from '../../stores/useLeagueStore';
-import { useMonetizationStore } from '../../stores/useMonetizationStore';
 import { createLeague, getActiveSeason } from '../../services/supabase/queries';
 import type { GameType } from '../../core/types';
 
@@ -362,8 +361,6 @@ export default function CreateLeagueScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const user = useAuthStore((s) => s.user);
   const invalidateLeagues = useLeagueStore((s) => s.invalidate);
-  const showAd = useMonetizationStore((s) => s.showAd);
-
   const selectedOption = GAME_TYPES.find((g) => g.value === gameType);
   const createLabel = selectedOption
     ? `Create ${selectedOption.label}`
@@ -403,7 +400,6 @@ export default function CreateLeagueScreen() {
           {
             text: 'OK',
             onPress: () => {
-              showAd();
               router.replace(`/league/${league.id}`);
             },
           },
