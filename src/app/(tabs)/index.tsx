@@ -2,11 +2,35 @@ import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useLeagueStore } from '../../stores/useLeagueStore';
 import { useSeasonStore } from '../../stores/useSeasonStore';
 import { getMillisUntilLock } from '../../core/locks';
 import AdBanner from '../../components/AdBanner';
+
+const GAME_TYPES = [
+  {
+    icon: 'git-network' as const,
+    title: 'Elimination Bracket',
+    description: 'Predict the full boot order before the season starts',
+  },
+  {
+    icon: 'swap-horizontal' as const,
+    title: 'Cast Draft',
+    description: 'Snake draft castaways and earn points all season',
+  },
+  {
+    icon: 'calendar' as const,
+    title: "Weekly Pick'em",
+    description: 'Pick who goes home and wins immunity each episode',
+  },
+  {
+    icon: 'shield-checkmark' as const,
+    title: 'Survivor Pool',
+    description: "Pick one castaway to survive each week \u2014 can't reuse",
+  },
+];
 
 export default function HomeScreen() {
   const user = useAuthStore((s) => s.user);
@@ -79,7 +103,7 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Leagues / Auth Card */}
+        {/* Leagues / Game Types */}
         {user ? (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>
@@ -106,18 +130,43 @@ export default function HomeScreen() {
             </View>
           </View>
         ) : (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Get Started</Text>
-            <Text style={styles.cardDetail}>
-              Sign in to create leagues, make picks, and compete with friends
-            </Text>
-            <Pressable
-              style={[styles.button, styles.primaryButton, { marginTop: 12 }]}
-              onPress={() => router.push('/auth')}
-            >
-              <Text style={styles.buttonText}>Sign In</Text>
-            </Pressable>
-          </View>
+          <>
+            {/* Game types overview */}
+            <Text style={styles.sectionTitle}>Four Ways to Play</Text>
+            {GAME_TYPES.map((game) => (
+              <View key={game.title} style={styles.gameTypeCard}>
+                <View style={styles.gameTypeIcon}>
+                  <Ionicons name={game.icon} size={22} color="#e94560" />
+                </View>
+                <View style={styles.gameTypeText}>
+                  <Text style={styles.gameTypeTitle}>{game.title}</Text>
+                  <Text style={styles.gameTypeDesc}>{game.description}</Text>
+                </View>
+              </View>
+            ))}
+
+            {/* CTA */}
+            <View style={[styles.card, { marginTop: 8 }]}>
+              <Text style={styles.cardTitle}>Ready to play?</Text>
+              <Text style={styles.cardDetail}>
+                Create an account to start making picks and competing with friends.
+              </Text>
+              <View style={styles.buttonRow}>
+                <Pressable
+                  style={[styles.button, styles.primaryButton]}
+                  onPress={() => router.push({ pathname: '/auth', params: { mode: 'signup' } })}
+                >
+                  <Text style={styles.buttonText}>Create Account</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.button, styles.secondaryButton]}
+                  onPress={() => router.push({ pathname: '/auth', params: { mode: 'signin' } })}
+                >
+                  <Text style={styles.buttonText}>Sign In</Text>
+                </Pressable>
+              </View>
+            </View>
+          </>
         )}
       </ScrollView>
       <AdBanner />
@@ -205,5 +254,43 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 12,
+    marginTop: 4,
+  },
+  gameTypeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a1a2e',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 10,
+    gap: 14,
+  },
+  gameTypeIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#16213e',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  gameTypeText: {
+    flex: 1,
+  },
+  gameTypeTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#ffffff',
+    marginBottom: 2,
+  },
+  gameTypeDesc: {
+    fontSize: 13,
+    color: '#a0a0a0',
+    lineHeight: 18,
   },
 });

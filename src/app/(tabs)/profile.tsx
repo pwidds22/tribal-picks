@@ -38,7 +38,7 @@ export default function ProfileScreen() {
   if (!user) {
     return (
       <SafeAreaView style={styles.container}>
-        <AuthPrompt />
+        <AuthPrompt icon="person" />
       </SafeAreaView>
     );
   }

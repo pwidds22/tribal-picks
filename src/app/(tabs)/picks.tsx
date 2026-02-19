@@ -142,7 +142,7 @@ export default function PicksScreen() {
   if (!user && !authLoading) {
     return (
       <SafeAreaView style={styles.container}>
-        <AuthPrompt message="Sign in to track your picks" />
+        <AuthPrompt message="Sign in to track your picks and compete." icon="checkmark-circle" />
       </SafeAreaView>
     );
   }

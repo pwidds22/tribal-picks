@@ -35,7 +35,7 @@ export default function LeaguesScreen() {
   if (!user && !authLoading) {
     return (
       <SafeAreaView style={styles.container}>
-        <AuthPrompt message="Sign in to create and join leagues" />
+        <AuthPrompt message="Sign in to create and join leagues." icon="people" />
       </SafeAreaView>
     );
   }

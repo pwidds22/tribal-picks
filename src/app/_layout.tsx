@@ -3,12 +3,16 @@ import { Pressable } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useMonetizationStore } from '../stores/useMonetizationStore';
+
+const ONBOARDING_KEY = 'tribal_picks_onboarded';
 
 export default function RootLayout() {
   const initialize = useAuthStore((s) => s.initialize);
   const user = useAuthStore((s) => s.user);
+  const isLoading = useAuthStore((s) => s.isLoading);
   const initMonetization = useMonetizationStore((s) => s.initialize);
   const syncUser = useMonetizationStore((s) => s.syncUser);
   const syncLogout = useMonetizationStore((s) => s.syncLogout);
@@ -18,6 +22,22 @@ export default function RootLayout() {
     const unsubscribe = initialize();
     return unsubscribe;
   }, [initialize]);
+
+  // Check if user has completed onboarding
+  useEffect(() => {
+    const checkOnboarding = async () => {
+      // Wait for auth to finish loading before deciding
+      if (isLoading) return;
+
+      try {
+        const hasOnboarded = await AsyncStorage.getItem(ONBOARDING_KEY);
+        if (!hasOnboarded && !user) {
+          router.replace('/welcome');
+        }
+      } catch {}
+    };
+    checkOnboarding();
+  }, [user, isLoading]);
 
   // Single effect handles both init and auth changes.
   // On first render prevUserId is undefined — we initialize with current userId.
@@ -51,6 +71,10 @@ export default function RootLayout() {
         }}
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="welcome"
+          options={{ headerShown: false, animation: 'fade' }}
+        />
         <Stack.Screen
           name="auth"
           options={{ title: 'Sign In', headerShown: false, presentation: 'modal' }}
