@@ -6,6 +6,7 @@ import {
   Pressable,
   ActivityIndicator,
   Share,
+  Alert,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +20,7 @@ import {
   assignSurvivorPoolRanks,
 } from '../../core/standings';
 import { useAuthStore } from '../../stores/useAuthStore';
+import { useLeagueStore } from '../../stores/useLeagueStore';
 import Leaderboard from '../../components/Leaderboard';
 import type {
   League,
@@ -29,7 +31,9 @@ import type {
 export default function LeagueDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const user = useAuthStore((s) => s.user);
+  const deleteLeague = useLeagueStore((s) => s.deleteLeague);
   const [league, setLeague] = useState<League | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [bracketStandings, setBracketStandings] = useState<LeaderboardEntry[]>(
     []
   );
@@ -89,6 +93,32 @@ export default function LeagueDetailScreen() {
       router.push(`/game/pool?leagueId=${league.id}`);
     }
   };
+
+  const handleDeleteLeague = () => {
+    Alert.alert(
+      'Delete League',
+      'Are you sure? This cannot be undone. All members, picks, and standings will be permanently deleted.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setIsDeleting(true);
+            try {
+              await deleteLeague(id!);
+              router.replace('/(tabs)/leagues');
+            } catch (err: any) {
+              Alert.alert('Error', err.message ?? 'Failed to delete league.');
+              setIsDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const isCommissioner = user?.id === league?.commissioner_id;
 
   if (isLoading) {
     return (
@@ -151,6 +181,20 @@ export default function LeagueDetailScreen() {
           currentUserId={user?.id ?? null}
         />
       ) : null}
+
+      {isCommissioner && (
+        <Pressable
+          style={styles.deleteButton}
+          onPress={handleDeleteLeague}
+          disabled={isDeleting}
+        >
+          {isDeleting ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.deleteButtonText}>Delete League</Text>
+          )}
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -249,5 +293,19 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     paddingHorizontal: 20,
     marginBottom: 12,
+  },
+  deleteButton: {
+    marginHorizontal: 20,
+    marginTop: 24,
+    marginBottom: 40,
+    backgroundColor: '#ff4757',
+    borderRadius: 10,
+    padding: 14,
+    alignItems: 'center',
+  },
+  deleteButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

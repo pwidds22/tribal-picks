@@ -269,11 +269,11 @@ export default function SurvivorPoolScreen() {
             <Text style={styles.modalTitle}>Survivor Pool Rules</Text>
             <ScrollView style={styles.modalScroll}>
               <Text style={styles.ruleText}>
-                {'\u2022'} Pick one castaway per episode to SURVIVE.{'\n\n'}
-                {'\u2022'} You cannot reuse a castaway you{"'"}ve already picked.{'\n\n'}
-                {'\u2022'} If your pick is eliminated, YOU are out of the pool.{'\n\n'}
-                {'\u2022'} Last fantasy player still alive wins the pool.{'\n\n'}
-                {'\u2022'} Double tribal: if your pick is eliminated in any tribal council that episode, you{"'"}re out.{'\n\n'}
+                {'\u2022'} Pick one castaway per episode to SURVIVE. If your picked castaway is eliminated, YOU are eliminated from the pool.{'\n\n'}
+                {'\u2022'} You cannot reuse a castaway you{"'"}ve already picked in a previous episode.{'\n\n'}
+                {'\u2022'} The last fantasy player remaining in the pool wins. This is about YOU outlasting other players, not your castaways.{'\n\n'}
+                {'\u2022'} If an episode has multiple tribal councils, a castaway eliminated in ANY tribal counts as eliminated. Choose carefully on double-elimination episodes.{'\n\n'}
+                {'\u2022'} Picks lock when the episode airs. You can change your pick up until lock time.{'\n\n'}
                 {'\u2022'} Medevac or quit counts as an elimination.{'\n\n'}
                 {'\u2022'} Recap/reunion episodes with no tribal council require no pick.
               </Text>
