@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Image } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { supabase } from '../../services/supabase/client';
 import type { Castaway } from '../../core/types';
@@ -44,7 +44,11 @@ export default function CastawayProfileScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.emoji}>🏝️</Text>
+        {castaway.photo_url ? (
+          <Image source={{ uri: castaway.photo_url }} style={styles.photo} />
+        ) : (
+          <Text style={styles.emoji}>🏝️</Text>
+        )}
         <Text style={styles.name}>{castaway.name}</Text>
         {castaway.tribe && (
           <Text style={styles.tribe}>{castaway.tribe}</Text>
@@ -107,6 +111,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 30,
     backgroundColor: '#1a1a2e',
+  },
+  photo: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    marginBottom: 12,
+    backgroundColor: '#16213e',
   },
   emoji: {
     fontSize: 64,

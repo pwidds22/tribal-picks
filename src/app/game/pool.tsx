@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '../../stores/useAuthStore';
@@ -30,6 +31,7 @@ export default function SurvivorPoolScreen() {
   const [nextEpisode, setNextEpisode] = useState<Episode | null>(null);
   const [usedIds, setUsedIds] = useState<number[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [savedId, setSavedId] = useState<number | null>(null);
   const [isAlive, setIsAlive] = useState(true);
   const [poolStatus, setPoolStatus] = useState<
     { user_id: string; is_alive: boolean; username: string }[]
@@ -64,7 +66,6 @@ export default function SurvivorPoolScreen() {
           getSurvivorPoolStatus(leagueId),
         ]);
 
-        setUsedIds(getUsedCastaways(picks));
         setPoolStatus(status);
 
         // Check if current user is still alive
@@ -73,14 +74,20 @@ export default function SurvivorPoolScreen() {
           setIsAlive(userStatus.is_alive);
         }
 
-        // Check if pick already made for this episode
+        // Separate current episode pick from previous picks
         if (episode) {
+          const previousPicks = picks.filter((p) => p.episode_id !== episode.id);
+          setUsedIds(getUsedCastaways(previousPicks));
+
           const existingPick = picks.find(
             (p) => p.episode_id === episode.id
           );
           if (existingPick) {
             setSelectedId(existingPick.picked_castaway_id);
+            setSavedId(existingPick.picked_castaway_id);
           }
+        } else {
+          setUsedIds(getUsedCastaways(picks));
         }
       }
     } catch (err) {
@@ -90,13 +97,8 @@ export default function SurvivorPoolScreen() {
     }
   };
 
-  const availableCastaways = useMemo(
-    () => castaways.filter((c) => !usedIds.includes(c.id)),
-    [castaways, usedIds]
-  );
-
   const handleSelect = (castawayId: number) => {
-    if (!isAlive || isLocked) return;
+    if (!isAlive || isLocked || usedIds.includes(castawayId)) return;
     setSelectedId(castawayId === selectedId ? null : castawayId);
   };
 
@@ -106,6 +108,7 @@ export default function SurvivorPoolScreen() {
     setIsSaving(true);
     try {
       await saveSurvivorPoolPick(leagueId, user.id, nextEpisode.id, selectedId);
+      setSavedId(selectedId);
       Alert.alert(
         'Pick Saved!',
         `You picked ${castaways.find((c) => c.id === selectedId)?.name} to survive this episode.`
@@ -117,6 +120,8 @@ export default function SurvivorPoolScreen() {
     }
   };
 
+  const hasPendingChange = selectedId !== null && selectedId !== savedId;
+  const availableCount = castaways.filter((c) => !usedIds.includes(c.id)).length;
   const aliveCount = poolStatus.filter((s) => s.is_alive).length;
   const eliminatedCount = poolStatus.filter((s) => !s.is_alive).length;
 
@@ -167,7 +172,7 @@ export default function SurvivorPoolScreen() {
         </View>
       </View>
 
-      {availableCastaways.length === 0 ? (
+      {availableCount === 0 ? (
         <View style={styles.center}>
           <Text style={styles.errorText}>
             No available castaways remaining!
@@ -175,22 +180,29 @@ export default function SurvivorPoolScreen() {
         </View>
       ) : (
         <FlatList
-          data={availableCastaways}
+          data={castaways}
           keyExtractor={(c) => c.id.toString()}
           numColumns={2}
           columnWrapperStyle={styles.columnWrapper}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => {
             const isSelected = item.id === selectedId;
+            const isUsed = usedIds.includes(item.id);
             return (
               <Pressable
                 style={[
                   styles.castawayCard,
                   isSelected && styles.castawayCardSelected,
+                  isUsed && styles.castawayCardUsed,
                 ]}
                 onPress={() => handleSelect(item.id)}
+                disabled={isUsed}
               >
-                <Text style={styles.castawayEmoji}>🏝️</Text>
+                {item.photo_url ? (
+                  <Image source={{ uri: item.photo_url }} style={styles.castawayPhoto} />
+                ) : (
+                  <Text style={styles.castawayEmoji}>🏝️</Text>
+                )}
                 <Text
                   style={[
                     styles.castawayName,
@@ -199,12 +211,20 @@ export default function SurvivorPoolScreen() {
                 >
                   {item.name}
                 </Text>
+                {item.hometown && (
+                  <Text style={styles.hometown}>{item.hometown}</Text>
+                )}
                 {item.tribe && (
                   <Text style={styles.tribe}>{item.tribe}</Text>
                 )}
                 {isSelected && (
                   <View style={styles.checkBadge}>
                     <Text style={styles.checkText}>✓</Text>
+                  </View>
+                )}
+                {isUsed && (
+                  <View style={styles.usedBadge}>
+                    <Text style={styles.usedBadgeText}>USED</Text>
                   </View>
                 )}
               </Pressable>
@@ -215,14 +235,16 @@ export default function SurvivorPoolScreen() {
 
       {selectedId !== null && !isLocked && (
         <Pressable
-          style={[styles.saveButton, isSaving && styles.buttonDisabled]}
+          style={[styles.saveButton, (!hasPendingChange || isSaving) && styles.buttonDisabled]}
           onPress={handleSave}
-          disabled={isSaving}
+          disabled={!hasPendingChange || isSaving}
         >
           {isSaving ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.saveButtonText}>Lock In Pick</Text>
+            <Text style={styles.saveButtonText}>
+              {hasPendingChange ? 'Lock In Pick' : 'Pick Saved'}
+            </Text>
           )}
         </Pressable>
       )}
@@ -309,6 +331,17 @@ const styles = StyleSheet.create({
     borderColor: '#2ed573',
     backgroundColor: '#1a2e1a',
   },
+  castawayCardUsed: {
+    opacity: 0.4,
+    borderColor: '#333',
+  },
+  castawayPhoto: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    marginBottom: 8,
+    backgroundColor: '#16213e',
+  },
   castawayEmoji: {
     fontSize: 32,
     marginBottom: 8,
@@ -322,10 +355,15 @@ const styles = StyleSheet.create({
   castawayNameSelected: {
     color: '#2ed573',
   },
+  hometown: {
+    color: '#888',
+    fontSize: 10,
+    marginTop: 2,
+  },
   tribe: {
     color: '#a0a0a0',
     fontSize: 11,
-    marginTop: 4,
+    marginTop: 2,
   },
   checkBadge: {
     position: 'absolute',
@@ -341,6 +379,20 @@ const styles = StyleSheet.create({
   checkText: {
     color: '#fff',
     fontSize: 14,
+    fontWeight: 'bold',
+  },
+  usedBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#666',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  usedBadgeText: {
+    color: '#999',
+    fontSize: 10,
     fontWeight: 'bold',
   },
   eliminatedEmoji: {

@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { Stack } from 'expo-router';
+import { Pressable } from 'react-native';
+import { Stack, router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useMonetizationStore } from '../stores/useMonetizationStore';
@@ -61,12 +63,39 @@ export default function RootLayout() {
           name="league/join"
           options={{ title: 'Join League', presentation: 'modal' }}
         />
-        <Stack.Screen name="league/[id]" options={{ title: 'League' }} />
+        <Stack.Screen
+          name="league/[id]"
+          options={{
+            title: 'League',
+            headerLeft: () => (
+              <Pressable onPress={() => router.back()} hitSlop={16}>
+                <Ionicons name="chevron-back" size={28} color="#e94560" />
+              </Pressable>
+            ),
+          }}
+        />
         <Stack.Screen
           name="game/bracket"
-          options={{ title: 'Elimination Bracket' }}
+          options={{
+            title: 'Elimination Bracket',
+            headerLeft: () => (
+              <Pressable onPress={() => router.back()} hitSlop={16}>
+                <Ionicons name="chevron-back" size={28} color="#e94560" />
+              </Pressable>
+            ),
+          }}
         />
-        <Stack.Screen name="game/pool" options={{ title: 'Survivor Pool' }} />
+        <Stack.Screen
+          name="game/pool"
+          options={{
+            title: 'Survivor Pool',
+            headerLeft: () => (
+              <Pressable onPress={() => router.back()} hitSlop={16}>
+                <Ionicons name="chevron-back" size={28} color="#e94560" />
+              </Pressable>
+            ),
+          }}
+        />
         <Stack.Screen
           name="castaway/[id]"
           options={{ title: 'Castaway', presentation: 'modal' }}

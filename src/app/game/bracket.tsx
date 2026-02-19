@@ -7,6 +7,7 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useAuthStore } from '../../stores/useAuthStore';
@@ -142,6 +143,11 @@ export default function BracketScreen() {
                 <Text style={styles.positionText}>{index + 1}</Text>
               </View>
 
+              {castaway.photo_url ? (
+                <Image source={{ uri: castaway.photo_url }} style={styles.castawayPhoto} />
+              ) : (
+                <View style={styles.castawayPhotoPlaceholder} />
+              )}
               <View style={styles.castawayInfo}>
                 <Text style={styles.castawayName}>{castaway.name}</Text>
                 {castaway.tribe && (
@@ -240,6 +246,20 @@ const styles = StyleSheet.create({
     color: '#e94560',
     fontSize: 14,
     fontWeight: 'bold',
+  },
+  castawayPhoto: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginRight: 10,
+    backgroundColor: '#16213e',
+  },
+  castawayPhotoPlaceholder: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginRight: 10,
+    backgroundColor: '#16213e',
   },
   castawayInfo: {
     flex: 1,
