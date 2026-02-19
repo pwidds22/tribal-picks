@@ -148,6 +148,11 @@ export default function LeagueDetailScreen() {
       <View style={styles.header}>
         <Text style={styles.leagueName}>{league.name}</Text>
         <Text style={styles.gameType}>{gameTypeLabel}</Text>
+        {league.start_episode > 1 && (
+          <Text style={styles.startEpisode}>
+            Starting from Episode {league.start_episode}
+          </Text>
+        )}
         <View style={styles.codeRow}>
           <Text style={styles.codeLabel}>Invite Code:</Text>
           <Pressable onPress={handleCopyCode} style={styles.codeButton}>
@@ -230,6 +235,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#e94560',
     fontWeight: '600',
+    marginBottom: 12,
+  },
+  startEpisode: {
+    fontSize: 12,
+    color: '#a0a0a0',
+    marginTop: -8,
     marginBottom: 12,
   },
   codeRow: {

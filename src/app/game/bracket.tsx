@@ -18,11 +18,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/useAuthStore';
 import {
   getCastaways,
+  getCastawaysAliveAtEpisode,
   getActiveSeason,
+  getLeague,
+  getEpisodeByNumber,
   saveBracketPicks,
   getBracketPicks,
 } from '../../services/supabase/queries';
-import { isBracketLocked } from '../../core/locks';
+import { isBracketLocked, isEpisodeLocked } from '../../core/locks';
 import type { Castaway } from '../../core/types';
 
 // Enable LayoutAnimation on Android
@@ -105,6 +108,7 @@ function EditPickSheet({
   castaway,
   currentPosition,
   totalPicked,
+  positionOffset = 0,
   onMoveToPosition,
   onSwapWith,
   onRemove,
@@ -114,6 +118,7 @@ function EditPickSheet({
   castaway: Castaway | null;
   currentPosition: number; // 0-indexed in the picked array
   totalPicked: number;
+  positionOffset?: number;
   onMoveToPosition: (newPosition: number) => void;
   onSwapWith: () => void;
   onRemove: () => void;
@@ -128,7 +133,7 @@ function EditPickSheet({
 
   if (!castaway) return null;
 
-  const positionLabel = `#${currentPosition + 1} out`;
+  const positionLabel = `#${currentPosition + 1 + positionOffset} out`;
 
   return (
     <Modal
@@ -378,6 +383,8 @@ export default function BracketScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
 
+  const [positionOffset, setPositionOffset] = useState(0);
+
   // Edit/swap state
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [swapSourceIndex, setSwapSourceIndex] = useState<number | null>(null);
@@ -391,10 +398,31 @@ export default function BracketScreen() {
       const season = await getActiveSeason();
       if (!season) return;
 
-      setIsLocked(isBracketLocked(season.premiere_date));
+      // Fetch league to get start_episode
+      let startEp = 1;
+      if (leagueId) {
+        const league = await getLeague(leagueId);
+        if (league) startEp = league.start_episode;
+      }
 
-      const allCastaways = await getCastaways(season.id);
-      setCastaways(allCastaways);
+      // Determine lock time based on start episode
+      if (startEp === 1) {
+        setIsLocked(isBracketLocked(season.premiere_date));
+      } else {
+        const episode = await getEpisodeByNumber(season.id, startEp);
+        setIsLocked(episode ? isEpisodeLocked(episode.air_date) : false);
+      }
+
+      // Load castaways — filter to alive at start episode if mid-season
+      let bracketCastaways: Castaway[];
+      if (startEp > 1) {
+        bracketCastaways = await getCastawaysAliveAtEpisode(season.id, startEp);
+        const fullCast = await getCastaways(season.id);
+        setPositionOffset(fullCast.length - bracketCastaways.length);
+      } else {
+        bracketCastaways = await getCastaways(season.id);
+      }
+      setCastaways(bracketCastaways);
 
       if (leagueId && user) {
         const existing = await getBracketPicks(leagueId, user.id);
@@ -525,13 +553,15 @@ export default function BracketScreen() {
     try {
       const picks = pickedIds.map((castawayId, index) => ({
         castaway_id: castawayId,
-        predicted_position: index + 1,
+        predicted_position: index + 1 + positionOffset,
       }));
 
       await saveBracketPicks(leagueId, user.id, picks);
       Alert.alert(
         'Bracket Saved!',
-        'Your elimination bracket has been saved. You can update it until the season premiere.',
+        positionOffset > 0
+          ? 'Your elimination bracket has been saved. You can update it until the start episode airs.'
+          : 'Your elimination bracket has been saved. You can update it until the season premiere.',
       );
     } catch (err: any) {
       Alert.alert('Error', err.message);
@@ -541,10 +571,12 @@ export default function BracketScreen() {
   };
 
   const getPositionLabel = (index: number): string => {
-    if (totalCastaways > 0 && index === totalCastaways - 1) return 'SOLE SURVIVOR';
-    if (totalCastaways > 1 && index === totalCastaways - 2) return 'Runner-up';
-    if (totalCastaways > 2 && index === totalCastaways - 3) return 'Final 3';
-    return `#${index + 1} out`;
+    const globalPos = index + 1 + positionOffset;
+    const totalGlobal = totalCastaways + positionOffset;
+    if (totalGlobal > 0 && globalPos === totalGlobal) return 'SOLE SURVIVOR';
+    if (totalGlobal > 1 && globalPos === totalGlobal - 1) return 'Runner-up';
+    if (totalGlobal > 2 && globalPos === totalGlobal - 2) return 'Final 3';
+    return `#${globalPos} out`;
   };
 
   // --- SECTION DATA ---
@@ -579,7 +611,7 @@ export default function BracketScreen() {
       result.push({
         title: allPicked
           ? 'ALL CASTAWAYS PICKED'
-          : `TAP TO PICK #${pickedIds.length + 1} OUT`,
+          : `TAP TO PICK #${pickedIds.length + 1 + positionOffset} OUT`,
         data: available.map((c) => ({
           type: 'available' as const,
           castaway: c,
@@ -632,7 +664,7 @@ export default function BracketScreen() {
               ? "Tap castaways in the order you think they'll be eliminated"
               : allPicked
                 ? 'All set! Review your bracket and save.'
-                : `Pick who goes out #${pickedIds.length + 1}`}
+                : `Pick who goes out #${pickedIds.length + 1 + positionOffset}`}
         </Text>
         {!isLocked && pickedIds.length > 0 && (
           <Pressable onPress={handleClearAll} hitSlop={8}>
@@ -687,7 +719,7 @@ export default function BracketScreen() {
                       isWinner && styles.winnerNumber,
                     ]}
                   >
-                    {item.index + 1}
+                    {item.index + 1 + positionOffset}
                   </Text>
                 </View>
                 {castaway.photo_url ? (
@@ -746,7 +778,7 @@ export default function BracketScreen() {
               <View style={styles.nextSlotRow}>
                 <View style={styles.nextSlotBadge}>
                   <Text style={styles.nextSlotNumber}>
-                    {pickedIds.length + 1}
+                    {pickedIds.length + 1 + positionOffset}
                   </Text>
                 </View>
                 <View style={styles.nextSlotDashed}>
@@ -754,7 +786,7 @@ export default function BracketScreen() {
                   <Text style={styles.nextSlotText}>
                     {pickedIds.length === 0
                       ? 'Tap a castaway below to start'
-                      : `Pick #${pickedIds.length + 1} out`}
+                      : `Pick #${pickedIds.length + 1 + positionOffset} out`}
                   </Text>
                 </View>
               </View>
@@ -821,6 +853,7 @@ export default function BracketScreen() {
         castaway={editingCastaway}
         currentPosition={editingIndex ?? 0}
         totalPicked={pickedIds.length}
+        positionOffset={positionOffset}
         onMoveToPosition={handleMoveToPosition}
         onSwapWith={handleEnterSwapMode}
         onRemove={handleRemovePick}

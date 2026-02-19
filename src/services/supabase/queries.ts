@@ -39,6 +39,21 @@ export async function getCastaways(seasonId: number): Promise<Castaway[]> {
   return data ?? [];
 }
 
+export async function getCastawaysAliveAtEpisode(
+  seasonId: number,
+  episodeNumber: number
+): Promise<Castaway[]> {
+  const { data, error } = await supabase
+    .from('castaways')
+    .select('*')
+    .eq('season_id', seasonId)
+    .or(`elimination_episode.is.null,elimination_episode.gte.${episodeNumber}`)
+    .order('name');
+
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function getCastawaysByTribe(
   seasonId: number
 ): Promise<Record<string, Castaway[]>> {
@@ -63,7 +78,8 @@ export async function createLeague(
   gameType: GameType,
   seasonId: number,
   commissionerId: string,
-  isPublic: boolean = false
+  isPublic: boolean = false,
+  startEpisode: number = 1
 ): Promise<League> {
   const inviteCode = generateInviteCode();
 
@@ -76,6 +92,7 @@ export async function createLeague(
       season_id: seasonId,
       commissioner_id: commissionerId,
       is_public: isPublic,
+      start_episode: startEpisode,
     })
     .select()
     .single();
@@ -172,6 +189,39 @@ export async function getNextEpisode(seasonId: number): Promise<Episode | null> 
     .select('*')
     .eq('season_id', seasonId)
     .eq('is_scored', false)
+    .order('number')
+    .limit(1)
+    .single();
+
+  if (error) return null;
+  return data;
+}
+
+export async function getEpisodeByNumber(
+  seasonId: number,
+  episodeNumber: number
+): Promise<Episode | null> {
+  const { data, error } = await supabase
+    .from('episodes')
+    .select('*')
+    .eq('season_id', seasonId)
+    .eq('number', episodeNumber)
+    .single();
+
+  if (error) return null;
+  return data;
+}
+
+export async function getNextEpisodeFromStart(
+  seasonId: number,
+  startEpisodeNumber: number
+): Promise<Episode | null> {
+  const { data, error } = await supabase
+    .from('episodes')
+    .select('*')
+    .eq('season_id', seasonId)
+    .eq('is_scored', false)
+    .gte('number', startEpisodeNumber)
     .order('number')
     .limit(1)
     .single();

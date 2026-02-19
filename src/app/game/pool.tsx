@@ -16,8 +16,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/useAuthStore';
 import {
   getCastaways,
+  getCastawaysAliveAtEpisode,
   getActiveSeason,
+  getLeague,
   getNextEpisode,
+  getNextEpisodeFromStart,
   getSurvivorPoolPicks,
   saveSurvivorPoolPick,
   getSurvivorPoolStatus,
@@ -53,9 +56,24 @@ export default function SurvivorPoolScreen() {
       const season = await getActiveSeason();
       if (!season) return;
 
+      // Fetch league to get start_episode
+      let startEp = 1;
+      if (leagueId) {
+        const league = await getLeague(leagueId);
+        if (league) startEp = league.start_episode;
+      }
+
+      // Load castaways alive at start episode, then filter to currently alive
+      const castawaysFetch = startEp > 1
+        ? getCastawaysAliveAtEpisode(season.id, startEp)
+        : getCastaways(season.id);
+      const episodeFetch = startEp > 1
+        ? getNextEpisodeFromStart(season.id, startEp)
+        : getNextEpisode(season.id);
+
       const [allCastaways, episode] = await Promise.all([
-        getCastaways(season.id),
-        getNextEpisode(season.id),
+        castawaysFetch,
+        episodeFetch,
       ]);
 
       setCastaways(allCastaways.filter((c) => !c.is_eliminated));

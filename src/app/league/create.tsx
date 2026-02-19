@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,8 +13,8 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useLeagueStore } from '../../stores/useLeagueStore';
-import { createLeague, getActiveSeason } from '../../services/supabase/queries';
-import type { GameType } from '../../core/types';
+import { createLeague, getActiveSeason, getEpisodes } from '../../services/supabase/queries';
+import type { GameType, Season, Episode } from '../../core/types';
 
 // ---------- Game Type Data ----------
 
@@ -359,12 +359,36 @@ export default function CreateLeagueScreen() {
   const [gameType, setGameType] = useState<GameType>('bracket');
   const [isPublic, setIsPublic] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [startEpisode, setStartEpisode] = useState(1);
+  const [episodes, setEpisodes] = useState<Episode[]>([]);
+  const [seasonData, setSeasonData] = useState<Season | null>(null);
   const user = useAuthStore((s) => s.user);
   const invalidateLeagues = useLeagueStore((s) => s.invalidate);
   const selectedOption = GAME_TYPES.find((g) => g.value === gameType);
   const createLabel = selectedOption
     ? `Create ${selectedOption.label}`
     : 'Create League';
+
+  useEffect(() => {
+    (async () => {
+      const season = await getActiveSeason();
+      if (!season) return;
+      setSeasonData(season);
+
+      const eps = await getEpisodes(season.id);
+      setEpisodes(eps);
+
+      // Smart default: episode 1 before premiere, next unscored after
+      const isBeforePremiere = season.premiere_date
+        ? Date.now() < new Date(season.premiere_date + 'T20:00:00-05:00').getTime()
+        : true;
+
+      if (!isBeforePremiere) {
+        const nextUnscored = eps.find((e) => !e.is_scored);
+        if (nextUnscored) setStartEpisode(nextUnscored.number);
+      }
+    })();
+  }, []);
 
   const handleCreate = async () => {
     if (!user) {
@@ -378,7 +402,7 @@ export default function CreateLeagueScreen() {
 
     setIsLoading(true);
     try {
-      const season = await getActiveSeason();
+      const season = seasonData ?? (await getActiveSeason());
       if (!season) {
         Alert.alert('Error', 'No active season found');
         return;
@@ -390,6 +414,7 @@ export default function CreateLeagueScreen() {
         season.id,
         user.id,
         isPublic,
+        startEpisode,
       );
 
       invalidateLeagues();
@@ -441,6 +466,51 @@ export default function CreateLeagueScreen() {
 
       {/* Comparison table */}
       <ComparisonTable />
+
+      {/* Start Episode Picker */}
+      {episodes.length > 0 && (
+        <>
+          <Text style={styles.label}>Start Episode</Text>
+          <View style={epPickerStyles.container}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={epPickerStyles.scroll}
+            >
+              {episodes.map((ep) => {
+                const isSelected = ep.number === startEpisode;
+                const isPast = ep.is_scored;
+                return (
+                  <Pressable
+                    key={ep.id}
+                    style={[
+                      epPickerStyles.chip,
+                      isSelected && epPickerStyles.chipSelected,
+                      isPast && !isSelected && epPickerStyles.chipPast,
+                    ]}
+                    onPress={() => setStartEpisode(ep.number)}
+                  >
+                    <Text
+                      style={[
+                        epPickerStyles.chipText,
+                        isSelected && epPickerStyles.chipTextSelected,
+                        isPast && !isSelected && epPickerStyles.chipTextPast,
+                      ]}
+                    >
+                      Ep {ep.number}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            <Text style={epPickerStyles.hint}>
+              {startEpisode === 1
+                ? 'Starting from the premiere (default)'
+                : `Starting from Episode ${startEpisode} — eliminated castaways will be excluded`}
+            </Text>
+          </View>
+        </>
+      )}
 
       {/* Public toggle */}
       <Pressable
@@ -563,6 +633,51 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+});
+
+const epPickerStyles = StyleSheet.create({
+  container: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#2a2a4e',
+  },
+  scroll: {
+    marginBottom: 8,
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#16213e',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#2a2a4e',
+  },
+  chipSelected: {
+    backgroundColor: '#e94560',
+    borderColor: '#e94560',
+  },
+  chipPast: {
+    opacity: 0.5,
+  },
+  chipText: {
+    color: '#a0a0a0',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  chipTextSelected: {
+    color: '#ffffff',
+  },
+  chipTextPast: {
+    color: '#666',
+  },
+  hint: {
+    fontSize: 12,
+    color: '#888',
+    lineHeight: 17,
   },
 });
 

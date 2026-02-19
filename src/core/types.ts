@@ -46,6 +46,7 @@ export type League = {
   season_id: number;
   commissioner_id: string;
   is_public: boolean;
+  start_episode: number;
   max_members: number;
   created_at: string;
 };
