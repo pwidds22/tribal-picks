@@ -86,6 +86,11 @@ export default function WelcomeScreen() {
         keyExtractor={(item) => item.id}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
+        getItemLayout={(_, index) => ({
+          length: width,
+          offset: width * index,
+          index,
+        })}
         renderItem={({ item }) => (
           <View style={[styles.slide, { width }]}>
             <View style={styles.iconContainer}>
