@@ -8,6 +8,7 @@ import {
   Share,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import {
   getLeague,
   getBracketStandings,
@@ -68,10 +69,15 @@ export default function LeagueDetailScreen() {
     }
   };
 
+  const handleCopyCode = async () => {
+    if (!league) return;
+    await Share.share({ message: league.invite_code });
+  };
+
   const handleShare = async () => {
     if (!league) return;
     await Share.share({
-      message: `Join my Tribal Picks league "${league.name}"! Use invite code: ${league.invite_code}`,
+      message: `Join my Tribal Picks league "${league.name}"!\n\nUse code: ${league.invite_code}\n\nOr tap to join: tribal-picks://join/${league.invite_code}`,
     });
   };
 
@@ -114,7 +120,10 @@ export default function LeagueDetailScreen() {
         <Text style={styles.gameType}>{gameTypeLabel}</Text>
         <View style={styles.codeRow}>
           <Text style={styles.codeLabel}>Invite Code:</Text>
-          <Text style={styles.code}>{league.invite_code}</Text>
+          <Pressable onPress={handleCopyCode} style={styles.codeButton}>
+            <Text style={styles.code}>{league.invite_code}</Text>
+            <Ionicons name="share-outline" size={18} color="#a0a0a0" />
+          </Pressable>
         </View>
       </View>
 
@@ -188,15 +197,20 @@ const styles = StyleSheet.create({
     color: '#a0a0a0',
     fontSize: 14,
   },
+  codeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#0f0f23',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
   code: {
     color: '#ffffff',
     fontSize: 18,
     fontWeight: 'bold',
     letterSpacing: 3,
-    backgroundColor: '#0f0f23',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 6,
   },
   actions: {
     flexDirection: 'row',

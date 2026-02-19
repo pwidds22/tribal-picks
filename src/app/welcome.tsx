@@ -10,9 +10,6 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const ONBOARDING_KEY = 'tribal_picks_onboarded';
 
 type Slide = {
   id: string;
@@ -32,9 +29,9 @@ const slides: Slide[] = [
   {
     id: '2',
     icon: 'trophy',
-    title: 'Four Ways to Play',
+    title: 'Two Ways to Play',
     description:
-      'Elimination Bracket \u2022 Cast Draft \u2022 Weekly Pick\u2019em \u2022 Survivor Pool \u2014 pick your game and prove you know Survivor.',
+      'Elimination Bracket \u2014 predict the full boot order.\n\nSurvivor Pool \u2014 pick one castaway to survive each week. If they\u2019re voted out, you\u2019re out.',
   },
   {
     id: '3',
@@ -61,19 +58,11 @@ export default function WelcomeScreen() {
 
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
 
-  const markOnboarded = async () => {
-    try {
-      await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
-    } catch {}
-  };
-
-  const handleGetStarted = async () => {
-    await markOnboarded();
+  const handleGetStarted = () => {
     router.replace({ pathname: '/auth', params: { mode: 'signup' } });
   };
 
-  const handleSignIn = async () => {
-    await markOnboarded();
+  const handleSignIn = () => {
     router.replace({ pathname: '/auth', params: { mode: 'signin' } });
   };
 
@@ -139,8 +128,10 @@ export default function WelcomeScreen() {
             <Pressable style={styles.primaryButton} onPress={handleNext}>
               <Text style={styles.primaryButtonText}>Next</Text>
             </Pressable>
-            <Pressable style={styles.skipButton} onPress={handleGetStarted}>
-              <Text style={styles.skipText}>Skip</Text>
+            <Pressable style={styles.signInButton} onPress={handleSignIn}>
+              <Text style={styles.signInText}>
+                Already have an account? <Text style={styles.signInLink}>Sign In</Text>
+              </Text>
             </Pressable>
           </>
         )}

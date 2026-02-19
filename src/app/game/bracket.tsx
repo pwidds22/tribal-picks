@@ -1,15 +1,20 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  FlatList,
+  SectionList,
   Pressable,
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
+  LayoutAnimation,
+  Platform,
+  UIManager,
 } from 'react-native';
-import { useLocalSearchParams, router } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/useAuthStore';
 import {
   getCastaways,
@@ -17,17 +22,365 @@ import {
   saveBracketPicks,
   getBracketPicks,
 } from '../../services/supabase/queries';
-import { isBracketLocked, getLockDeadlineLabel } from '../../core/locks';
+import { isBracketLocked } from '../../core/locks';
 import type { Castaway } from '../../core/types';
+
+// Enable LayoutAnimation on Android
+if (
+  Platform.OS === 'android' &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+// ---------- Sub-Components ----------
+
+/** Progress bar showing bracket completion with milestone markers */
+function BracketProgress({
+  filled,
+  total,
+}: {
+  filled: number;
+  total: number;
+}) {
+  const pct = total > 0 ? filled / total : 0;
+
+  // Milestone positions (0-indexed): Merge ~position 10, Final 3 ~position 15, Winner = 17
+  const milestones =
+    total > 0
+      ? [
+          { position: Math.floor(total * 0.56), label: 'Merge' },
+          { position: total - 3, label: 'Final 3' },
+          { position: total - 1, label: 'Winner' },
+        ]
+      : [];
+
+  return (
+    <View style={progressStyles.container}>
+      <View style={progressStyles.labelRow}>
+        <Text style={progressStyles.count}>
+          {filled}/{total} picked
+        </Text>
+        {filled === total && total > 0 && (
+          <Text style={progressStyles.complete}>✓ Complete!</Text>
+        )}
+      </View>
+      <View style={progressStyles.track}>
+        <View
+          style={[progressStyles.fill, { width: `${Math.min(pct * 100, 100)}%` }]}
+        />
+        {milestones.map((m) => {
+          const left = ((m.position + 1) / total) * 100;
+          const reached = filled > m.position;
+          return (
+            <View
+              key={m.label}
+              style={[progressStyles.milestone, { left: `${left}%` }]}
+            >
+              <View
+                style={[
+                  progressStyles.milestoneDot,
+                  reached && progressStyles.milestoneDotReached,
+                ]}
+              />
+              <Text
+                style={[
+                  progressStyles.milestoneLabel,
+                  reached && progressStyles.milestoneLabelReached,
+                ]}
+              >
+                {m.label}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+/** Bottom sheet for editing a picked castaway's position */
+function EditPickSheet({
+  visible,
+  castaway,
+  currentPosition,
+  totalPicked,
+  onMoveToPosition,
+  onSwapWith,
+  onRemove,
+  onClose,
+}: {
+  visible: boolean;
+  castaway: Castaway | null;
+  currentPosition: number; // 0-indexed in the picked array
+  totalPicked: number;
+  onMoveToPosition: (newPosition: number) => void;
+  onSwapWith: () => void;
+  onRemove: () => void;
+  onClose: () => void;
+}) {
+  const [showPositionPicker, setShowPositionPicker] = useState(false);
+
+  // Reset position picker when sheet opens/closes
+  useEffect(() => {
+    if (!visible) setShowPositionPicker(false);
+  }, [visible]);
+
+  if (!castaway) return null;
+
+  const positionLabel = `#${currentPosition + 1} out`;
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable style={sheetStyles.overlay} onPress={onClose}>
+        <Pressable
+          style={sheetStyles.sheet}
+          onPress={(e) => e.stopPropagation()}
+        >
+          {/* Drag handle */}
+          <View style={sheetStyles.handle} />
+
+          {/* Header: castaway info */}
+          <View style={sheetStyles.header}>
+            {castaway.photo_url ? (
+              <Image
+                source={{ uri: castaway.photo_url }}
+                style={sheetStyles.photo}
+              />
+            ) : (
+              <View style={sheetStyles.photoPlaceholder}>
+                <Ionicons name="person" size={22} color="#666" />
+              </View>
+            )}
+            <View style={sheetStyles.headerInfo}>
+              <Text style={sheetStyles.name}>{castaway.name}</Text>
+              <Text style={sheetStyles.position}>
+                Currently: {positionLabel}
+              </Text>
+            </View>
+          </View>
+
+          {!showPositionPicker ? (
+            <View style={sheetStyles.actions}>
+              {/* Quick Move Up/Down */}
+              <View style={sheetStyles.quickMoveRow}>
+                <Pressable
+                  style={[
+                    sheetStyles.quickBtn,
+                    currentPosition === 0 && sheetStyles.quickBtnDisabled,
+                  ]}
+                  onPress={() => {
+                    if (currentPosition > 0) {
+                      onMoveToPosition(currentPosition - 1);
+                      onClose();
+                    }
+                  }}
+                  disabled={currentPosition === 0}
+                >
+                  <Ionicons
+                    name="arrow-up"
+                    size={16}
+                    color={currentPosition === 0 ? '#444' : '#fff'}
+                  />
+                  <Text
+                    style={[
+                      sheetStyles.quickBtnText,
+                      currentPosition === 0 && sheetStyles.quickBtnTextDisabled,
+                    ]}
+                  >
+                    Move Up
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    sheetStyles.quickBtn,
+                    currentPosition >= totalPicked - 1 &&
+                      sheetStyles.quickBtnDisabled,
+                  ]}
+                  onPress={() => {
+                    if (currentPosition < totalPicked - 1) {
+                      onMoveToPosition(currentPosition + 1);
+                      onClose();
+                    }
+                  }}
+                  disabled={currentPosition >= totalPicked - 1}
+                >
+                  <Ionicons
+                    name="arrow-down"
+                    size={16}
+                    color={
+                      currentPosition >= totalPicked - 1 ? '#444' : '#fff'
+                    }
+                  />
+                  <Text
+                    style={[
+                      sheetStyles.quickBtnText,
+                      currentPosition >= totalPicked - 1 &&
+                        sheetStyles.quickBtnTextDisabled,
+                    ]}
+                  >
+                    Move Down
+                  </Text>
+                </Pressable>
+              </View>
+
+              {/* Move to specific position */}
+              <Pressable
+                style={sheetStyles.actionButton}
+                onPress={() => setShowPositionPicker(true)}
+              >
+                <Ionicons name="swap-vertical" size={22} color="#e94560" />
+                <View style={sheetStyles.actionTextArea}>
+                  <Text style={sheetStyles.actionText}>
+                    Move to position...
+                  </Text>
+                  <Text style={sheetStyles.actionHint}>
+                    Jump to any slot in your bracket
+                  </Text>
+                </View>
+              </Pressable>
+
+              {/* Swap with another */}
+              {totalPicked > 1 && (
+                <Pressable
+                  style={sheetStyles.actionButton}
+                  onPress={() => {
+                    onClose();
+                    // Small delay so sheet closes before swap mode activates
+                    setTimeout(onSwapWith, 200);
+                  }}
+                >
+                  <Ionicons name="repeat-outline" size={22} color="#e94560" />
+                  <View style={sheetStyles.actionTextArea}>
+                    <Text style={sheetStyles.actionText}>
+                      Swap with another pick
+                    </Text>
+                    <Text style={sheetStyles.actionHint}>
+                      Exchange positions with any other pick
+                    </Text>
+                  </View>
+                </Pressable>
+              )}
+
+              {/* Remove */}
+              <Pressable
+                style={sheetStyles.actionButton}
+                onPress={() => {
+                  onClose();
+                  setTimeout(onRemove, 200);
+                }}
+              >
+                <Ionicons
+                  name="close-circle-outline"
+                  size={22}
+                  color="#e94560"
+                />
+                <View style={sheetStyles.actionTextArea}>
+                  <Text style={sheetStyles.actionText}>
+                    Remove from bracket
+                  </Text>
+                  <Text style={sheetStyles.actionHint}>
+                    Return to available pool, others shift up
+                  </Text>
+                </View>
+              </Pressable>
+            </View>
+          ) : (
+            /* Position picker grid */
+            <View style={sheetStyles.positionPicker}>
+              <Text style={sheetStyles.pickerTitle}>
+                Move to which position?
+              </Text>
+              <View style={sheetStyles.positionGrid}>
+                {Array.from({ length: totalPicked }, (_, i) => {
+                  const isCurrent = i === currentPosition;
+                  return (
+                    <Pressable
+                      key={i}
+                      style={[
+                        sheetStyles.positionCell,
+                        isCurrent && sheetStyles.positionCellCurrent,
+                      ]}
+                      onPress={() => {
+                        if (!isCurrent) {
+                          onMoveToPosition(i);
+                          onClose();
+                        }
+                      }}
+                      disabled={isCurrent}
+                    >
+                      <Text
+                        style={[
+                          sheetStyles.positionCellText,
+                          isCurrent && sheetStyles.positionCellTextCurrent,
+                        ]}
+                      >
+                        {i + 1}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <Pressable
+                style={sheetStyles.backButton}
+                onPress={() => setShowPositionPicker(false)}
+              >
+                <Text style={sheetStyles.backButtonText}>Back</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {/* Cancel */}
+          <Pressable style={sheetStyles.cancelButton} onPress={onClose}>
+            <Text style={sheetStyles.cancelText}>Cancel</Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+/** Swap mode banner shown at the top when user is in "swap with..." mode */
+function SwapModeBanner({
+  castaway,
+  onCancel,
+}: {
+  castaway: Castaway;
+  onCancel: () => void;
+}) {
+  return (
+    <View style={swapStyles.banner}>
+      <Ionicons name="repeat-outline" size={18} color="#fff" />
+      <Text style={swapStyles.text} numberOfLines={1}>
+        Tap another pick to swap with{' '}
+        <Text style={swapStyles.name}>{castaway.name}</Text>
+      </Text>
+      <Pressable onPress={onCancel} hitSlop={12}>
+        <Text style={swapStyles.cancel}>Cancel</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+// ---------- Main Screen ----------
 
 export default function BracketScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
   const user = useAuthStore((s) => s.user);
   const [castaways, setCastaways] = useState<Castaway[]>([]);
-  const [orderedIds, setOrderedIds] = useState<number[]>([]);
+  const [pickedIds, setPickedIds] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
+
+  // Edit/swap state
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [swapSourceIndex, setSwapSourceIndex] = useState<number | null>(null);
 
   useEffect(() => {
     loadData();
@@ -43,20 +396,14 @@ export default function BracketScreen() {
       const allCastaways = await getCastaways(season.id);
       setCastaways(allCastaways);
 
-      // Check for existing picks
       if (leagueId && user) {
         const existing = await getBracketPicks(leagueId, user.id);
         if (existing.length > 0) {
-          // Restore saved order
           const savedOrder = existing
             .sort((a, b) => a.predicted_position - b.predicted_position)
             .map((p) => p.castaway_id);
-          setOrderedIds(savedOrder);
-        } else {
-          setOrderedIds(allCastaways.map((c) => c.id));
+          setPickedIds(savedOrder);
         }
-      } else {
-        setOrderedIds(allCastaways.map((c) => c.id));
       }
     } catch (err) {
       console.error(err);
@@ -65,38 +412,127 @@ export default function BracketScreen() {
     }
   };
 
-  const moveUp = (index: number) => {
-    if (index === 0 || isLocked) return;
-    const newOrder = [...orderedIds];
-    [newOrder[index - 1], newOrder[index]] = [
-      newOrder[index],
-      newOrder[index - 1],
-    ];
-    setOrderedIds(newOrder);
-  };
+  const castawayMap = useMemo(() => {
+    const map = new Map<number, Castaway>();
+    for (const c of castaways) map.set(c.id, c);
+    return map;
+  }, [castaways]);
 
-  const moveDown = (index: number) => {
-    if (index === orderedIds.length - 1 || isLocked) return;
-    const newOrder = [...orderedIds];
-    [newOrder[index], newOrder[index + 1]] = [
-      newOrder[index + 1],
-      newOrder[index],
-    ];
-    setOrderedIds(newOrder);
+  const pickedSet = useMemo(() => new Set(pickedIds), [pickedIds]);
+
+  const available = useMemo(
+    () => castaways.filter((c) => !pickedSet.has(c.id)),
+    [castaways, pickedSet],
+  );
+
+  const totalCastaways = castaways.length;
+  const allPicked =
+    pickedIds.length === totalCastaways && totalCastaways > 0;
+
+  // --- CORE ACTIONS ---
+
+  /** Tap an available castaway to add to the next bracket slot */
+  const handlePick = useCallback(
+    (id: number) => {
+      if (isLocked) return;
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setPickedIds((prev) => [...prev, id]);
+    },
+    [isLocked],
+  );
+
+  /** Tap a picked castaway: if in swap mode, swap; otherwise open edit sheet */
+  const handlePickedTap = useCallback(
+    (index: number) => {
+      if (isLocked) return;
+
+      if (swapSourceIndex !== null) {
+        // Complete the swap
+        if (index !== swapSourceIndex) {
+          LayoutAnimation.configureNext(
+            LayoutAnimation.Presets.easeInEaseOut,
+          );
+          setPickedIds((prev) => {
+            const next = [...prev];
+            const temp = next[swapSourceIndex];
+            next[swapSourceIndex] = next[index];
+            next[index] = temp;
+            return next;
+          });
+        }
+        setSwapSourceIndex(null);
+      } else {
+        // Open edit sheet
+        setEditingIndex(index);
+      }
+    },
+    [isLocked, swapSourceIndex],
+  );
+
+  /** Move a castaway from one position to another (insert, not swap) */
+  const handleMoveToPosition = useCallback(
+    (newPosition: number) => {
+      if (editingIndex === null) return;
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setPickedIds((prev) => {
+        const next = [...prev];
+        const [removed] = next.splice(editingIndex, 1);
+        next.splice(newPosition, 0, removed);
+        return next;
+      });
+      setEditingIndex(null);
+    },
+    [editingIndex],
+  );
+
+  /** Enter swap mode: user will tap another pick to swap with */
+  const handleEnterSwapMode = useCallback(() => {
+    if (editingIndex === null) return;
+    setSwapSourceIndex(editingIndex);
+    setEditingIndex(null);
+  }, [editingIndex]);
+
+  /** Remove a single pick, shifting everything below it up */
+  const handleRemovePick = useCallback(() => {
+    if (editingIndex === null) return;
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setPickedIds((prev) => prev.filter((_, i) => i !== editingIndex));
+    setEditingIndex(null);
+  }, [editingIndex]);
+
+  const handleClearAll = () => {
+    if (isLocked) return;
+    Alert.alert('Clear Bracket', 'Remove all picks and start over?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Clear',
+        style: 'destructive',
+        onPress: () => {
+          LayoutAnimation.configureNext(
+            LayoutAnimation.Presets.easeInEaseOut,
+          );
+          setPickedIds([]);
+          setSwapSourceIndex(null);
+        },
+      },
+    ]);
   };
 
   const handleSave = async () => {
-    if (!leagueId || !user || isLocked) return;
+    if (!leagueId || !user || isLocked || !allPicked) return;
 
     setIsSaving(true);
     try {
-      const picks = orderedIds.map((castawayId, index) => ({
+      const picks = pickedIds.map((castawayId, index) => ({
         castaway_id: castawayId,
-        predicted_position: index + 1, // 1 = first out, last = winner
+        predicted_position: index + 1,
       }));
 
       await saveBracketPicks(leagueId, user.id, picks);
-      Alert.alert('Picks Saved!', 'Your elimination bracket has been saved. You can update it until the season premiere.');
+      Alert.alert(
+        'Bracket Saved!',
+        'Your elimination bracket has been saved. You can update it until the season premiere.',
+      );
     } catch (err: any) {
       Alert.alert('Error', err.message);
     } finally {
@@ -104,10 +540,67 @@ export default function BracketScreen() {
     }
   };
 
-  const getCastaway = useCallback(
-    (id: number) => castaways.find((c) => c.id === id),
-    [castaways]
-  );
+  const getPositionLabel = (index: number): string => {
+    if (totalCastaways > 0 && index === totalCastaways - 1) return 'SOLE SURVIVOR';
+    if (totalCastaways > 1 && index === totalCastaways - 2) return 'Runner-up';
+    if (totalCastaways > 2 && index === totalCastaways - 3) return 'Final 3';
+    return `#${index + 1} out`;
+  };
+
+  // --- SECTION DATA ---
+
+  type SectionItem =
+    | { type: 'picked'; castawayId: number; index: number }
+    | { type: 'next_slot' }
+    | { type: 'available'; castaway: Castaway };
+
+  const sections = useMemo(() => {
+    const bracketItems: SectionItem[] = pickedIds.map((id, index) => ({
+      type: 'picked' as const,
+      castawayId: id,
+      index,
+    }));
+
+    if (!allPicked && !isLocked) {
+      bracketItems.push({ type: 'next_slot' as const });
+    }
+
+    const result: { title: string; data: SectionItem[] }[] = [
+      {
+        title: `YOUR BRACKET (${pickedIds.length}/${totalCastaways})`,
+        data:
+          bracketItems.length > 0
+            ? bracketItems
+            : [{ type: 'next_slot' as const }],
+      },
+    ];
+
+    if (!isLocked && available.length > 0) {
+      result.push({
+        title: allPicked
+          ? 'ALL CASTAWAYS PICKED'
+          : `TAP TO PICK #${pickedIds.length + 1} OUT`,
+        data: available.map((c) => ({
+          type: 'available' as const,
+          castaway: c,
+        })),
+      });
+    }
+
+    return result;
+  }, [pickedIds, available, allPicked, isLocked, totalCastaways]);
+
+  // Editing castaway for the sheet
+  const editingCastaway =
+    editingIndex !== null
+      ? castawayMap.get(pickedIds[editingIndex]) ?? null
+      : null;
+
+  // Swap source castaway for the banner
+  const swapSourceCastaway =
+    swapSourceIndex !== null
+      ? castawayMap.get(pickedIds[swapSourceIndex]) ?? null
+      : null;
 
   if (isLoading) {
     return (
@@ -119,71 +612,196 @@ export default function BracketScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Swap mode banner */}
+      {swapSourceCastaway && (
+        <SwapModeBanner
+          castaway={swapSourceCastaway}
+          onCancel={() => setSwapSourceIndex(null)}
+        />
+      )}
+
+      {/* Progress bar */}
+      <BracketProgress filled={pickedIds.length} total={totalCastaways} />
+
+      {/* Instructions */}
       <View style={styles.instructions}>
         <Text style={styles.instructionText}>
           {isLocked
             ? 'Brackets are locked. Good luck this season!'
-            : 'Order castaways from first eliminated (#1) to Sole Survivor (last). Use arrows to reorder.'}
+            : pickedIds.length === 0
+              ? "Tap castaways in the order you think they'll be eliminated"
+              : allPicked
+                ? 'All set! Review your bracket and save.'
+                : `Pick who goes out #${pickedIds.length + 1}`}
         </Text>
+        {!isLocked && pickedIds.length > 0 && (
+          <Pressable onPress={handleClearAll} hitSlop={8}>
+            <Text style={styles.clearText}>Clear All</Text>
+          </Pressable>
+        )}
       </View>
 
-      <FlatList
-        data={orderedIds}
-        keyExtractor={(id) => id.toString()}
-        renderItem={({ item: castawayId, index }) => {
-          const castaway = getCastaway(castawayId);
-          if (!castaway) return null;
+      <SectionList
+        sections={sections}
+        keyExtractor={(item) => {
+          if (item.type === 'picked') return `picked-${item.castawayId}`;
+          if (item.type === 'next_slot') return 'next-slot';
+          return `avail-${item.castaway.id}`;
+        }}
+        renderSectionHeader={({ section }) => (
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>{section.title}</Text>
+          </View>
+        )}
+        renderItem={({ item }) => {
+          if (item.type === 'picked') {
+            const castaway = castawayMap.get(item.castawayId);
+            if (!castaway) return null;
+            const isWinner =
+              totalCastaways > 0 && item.index === totalCastaways - 1;
+            const isSwapSource = item.index === swapSourceIndex;
+            const isSwapTarget =
+              swapSourceIndex !== null && !isSwapSource;
+            const label = getPositionLabel(item.index);
 
-          const isFirst = index === 0;
-          const isLast = index === orderedIds.length - 1;
+            return (
+              <Pressable
+                style={[
+                  styles.pickedRow,
+                  isWinner && styles.winnerRow,
+                  isSwapSource && styles.swapSourceRow,
+                  isSwapTarget && styles.swapTargetRow,
+                ]}
+                onPress={() => handlePickedTap(item.index)}
+                disabled={isLocked}
+              >
+                <View
+                  style={[
+                    styles.positionBadge,
+                    isWinner && styles.winnerBadge,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.positionNumber,
+                      isWinner && styles.winnerNumber,
+                    ]}
+                  >
+                    {item.index + 1}
+                  </Text>
+                </View>
+                {castaway.photo_url ? (
+                  <Image
+                    source={{ uri: castaway.photo_url }}
+                    style={styles.photo}
+                  />
+                ) : (
+                  <View style={styles.photoPlaceholder}>
+                    <Ionicons name="person" size={16} color="#666" />
+                  </View>
+                )}
+                <View style={styles.pickedInfo}>
+                  <Text
+                    style={[
+                      styles.pickedName,
+                      isWinner && styles.winnerName,
+                    ]}
+                  >
+                    {castaway.name}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.positionLabel,
+                      isWinner && styles.winnerLabel,
+                    ]}
+                  >
+                    {label}
+                  </Text>
+                </View>
+                {!isLocked && !swapSourceIndex && (
+                  <Ionicons
+                    name="ellipsis-horizontal"
+                    size={20}
+                    color="#666"
+                  />
+                )}
+                {isSwapTarget && (
+                  <Ionicons
+                    name="repeat-outline"
+                    size={20}
+                    color="#e94560"
+                  />
+                )}
+                {isSwapSource && (
+                  <View style={styles.swapSourceBadge}>
+                    <Text style={styles.swapSourceBadgeText}>Selected</Text>
+                  </View>
+                )}
+              </Pressable>
+            );
+          }
 
-          return (
-            <View style={styles.row}>
-              <View style={styles.positionBadge}>
-                <Text style={styles.positionText}>{index + 1}</Text>
+          if (item.type === 'next_slot') {
+            return (
+              <View style={styles.nextSlotRow}>
+                <View style={styles.nextSlotBadge}>
+                  <Text style={styles.nextSlotNumber}>
+                    {pickedIds.length + 1}
+                  </Text>
+                </View>
+                <View style={styles.nextSlotDashed}>
+                  <Ionicons name="arrow-down" size={16} color="#e94560" />
+                  <Text style={styles.nextSlotText}>
+                    {pickedIds.length === 0
+                      ? 'Tap a castaway below to start'
+                      : `Pick #${pickedIds.length + 1} out`}
+                  </Text>
+                </View>
               </View>
+            );
+          }
 
+          // Available castaway
+          const { castaway } = item;
+          return (
+            <Pressable
+              style={[
+                styles.availableRow,
+                !!swapSourceIndex && styles.availableRowDisabled,
+              ]}
+              onPress={() => handlePick(castaway.id)}
+              disabled={!!swapSourceIndex}
+            >
               {castaway.photo_url ? (
-                <Image source={{ uri: castaway.photo_url }} style={styles.castawayPhoto} />
+                <Image
+                  source={{ uri: castaway.photo_url }}
+                  style={styles.photo}
+                />
               ) : (
-                <View style={styles.castawayPhotoPlaceholder} />
+                <View style={styles.photoPlaceholder}>
+                  <Ionicons name="person" size={16} color="#666" />
+                </View>
               )}
-              <View style={styles.castawayInfo}>
-                <Text style={styles.castawayName}>{castaway.name}</Text>
+              <View style={styles.availableInfo}>
+                <Text style={styles.availableName}>{castaway.name}</Text>
                 {castaway.tribe && (
                   <Text style={styles.tribe}>{castaway.tribe}</Text>
                 )}
               </View>
-
-              <View style={styles.arrows}>
-                <Pressable
-                  onPress={() => moveUp(index)}
-                  disabled={isFirst || isLocked}
-                  style={[styles.arrow, isFirst && styles.arrowDisabled]}
-                >
-                  <Text style={styles.arrowText}>▲</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => moveDown(index)}
-                  disabled={isLast || isLocked}
-                  style={[styles.arrow, isLast && styles.arrowDisabled]}
-                >
-                  <Text style={styles.arrowText}>▼</Text>
-                </Pressable>
-              </View>
-
-              {isLast && (
-                <View style={styles.winnerBadge}>
-                  <Text style={styles.winnerText}>WINNER</Text>
-                </View>
-              )}
-            </View>
+              <Ionicons
+                name="add-circle-outline"
+                size={24}
+                color={swapSourceIndex ? '#333' : '#e94560'}
+              />
+            </Pressable>
           );
         }}
         contentContainerStyle={styles.listContent}
+        stickySectionHeadersEnabled
       />
 
-      {!isLocked && (
+      {/* Save button */}
+      {!isLocked && allPicked && (
         <Pressable
           style={[styles.saveButton, isSaving && styles.buttonDisabled]}
           onPress={handleSave}
@@ -196,9 +814,23 @@ export default function BracketScreen() {
           )}
         </Pressable>
       )}
+
+      {/* Edit pick bottom sheet */}
+      <EditPickSheet
+        visible={editingIndex !== null}
+        castaway={editingCastaway}
+        currentPosition={editingIndex ?? 0}
+        totalPicked={pickedIds.length}
+        onMoveToPosition={handleMoveToPosition}
+        onSwapWith={handleEnterSwapMode}
+        onRemove={handleRemovePick}
+        onClose={() => setEditingIndex(null)}
+      />
     </View>
   );
 }
+
+// ---------- Styles ----------
 
 const styles = StyleSheet.create({
   container: {
@@ -212,20 +844,136 @@ const styles = StyleSheet.create({
     backgroundColor: '#0f0f23',
   },
   instructions: {
-    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     backgroundColor: '#1a1a2e',
     borderBottomWidth: 1,
     borderBottomColor: '#2a2a4e',
   },
   instructionText: {
     color: '#a0a0a0',
+    fontSize: 14,
+    flex: 1,
+  },
+  clearText: {
+    color: '#e94560',
     fontSize: 13,
-    textAlign: 'center',
+    fontWeight: '600',
+    marginLeft: 12,
   },
   listContent: {
     paddingBottom: 100,
   },
-  row: {
+  sectionHeader: {
+    backgroundColor: '#0f0f23',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1a1a2e',
+  },
+  sectionTitle: {
+    color: '#e94560',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+
+  // Picked rows
+  pickedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#12122a',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1a1a2e',
+  },
+  winnerRow: {
+    backgroundColor: '#1a1025',
+    borderBottomColor: '#2a1a3e',
+  },
+  swapSourceRow: {
+    backgroundColor: '#1e1040',
+    borderWidth: 1,
+    borderColor: '#e94560',
+  },
+  swapTargetRow: {
+    backgroundColor: '#15152e',
+  },
+  positionBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#16213e',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  winnerBadge: {
+    backgroundColor: '#e94560',
+  },
+  positionNumber: {
+    color: '#a0a0a0',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  winnerNumber: {
+    color: '#fff',
+  },
+  photo: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginRight: 10,
+    backgroundColor: '#16213e',
+  },
+  photoPlaceholder: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginRight: 10,
+    backgroundColor: '#16213e',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pickedInfo: {
+    flex: 1,
+  },
+  pickedName: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  winnerName: {
+    color: '#e94560',
+  },
+  positionLabel: {
+    color: '#666',
+    fontSize: 11,
+    marginTop: 1,
+  },
+  winnerLabel: {
+    color: '#e94560',
+    fontWeight: '600',
+  },
+  swapSourceBadge: {
+    backgroundColor: '#e94560',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  swapSourceBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+
+  // Next slot indicator
+  nextSlotRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
@@ -233,86 +981,67 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#1a1a2e',
   },
-  positionBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#16213e',
+  nextSlotBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#e94560',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 10,
   },
-  positionText: {
+  nextSlotNumber: {
     color: '#e94560',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: 'bold',
   },
-  castawayPhoto: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    marginRight: 10,
-    backgroundColor: '#16213e',
+  nextSlotDashed: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  castawayPhotoPlaceholder: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    marginRight: 10,
-    backgroundColor: '#16213e',
+  nextSlotText: {
+    color: '#e94560',
+    fontSize: 14,
+    fontStyle: 'italic',
   },
-  castawayInfo: {
+
+  // Available rows
+  availableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1a1a2e',
+  },
+  availableRowDisabled: {
+    opacity: 0.4,
+  },
+  availableInfo: {
     flex: 1,
   },
-  castawayName: {
+  availableName: {
     color: '#ffffff',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
   },
   tribe: {
     color: '#a0a0a0',
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: 11,
+    marginTop: 1,
   },
-  arrows: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  arrow: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: '#16213e',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  arrowDisabled: {
-    opacity: 0.3,
-  },
-  arrowText: {
-    color: '#e94560',
-    fontSize: 14,
-  },
-  winnerBadge: {
-    position: 'absolute',
-    right: 16,
-    backgroundColor: '#e94560',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
-  },
-  winnerText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
+
+  // Save button
   saveButton: {
     position: 'absolute',
     bottom: 30,
     left: 20,
     right: 20,
     backgroundColor: '#e94560',
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 16,
     alignItems: 'center',
   },
@@ -323,5 +1052,253 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+});
+
+const progressStyles = StyleSheet.create({
+  container: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#0f0f23',
+  },
+  labelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  count: {
+    color: '#a0a0a0',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  complete: {
+    color: '#4ecdc4',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  track: {
+    height: 6,
+    backgroundColor: '#16213e',
+    borderRadius: 3,
+    overflow: 'visible',
+    position: 'relative',
+  },
+  fill: {
+    height: 6,
+    backgroundColor: '#e94560',
+    borderRadius: 3,
+  },
+  milestone: {
+    position: 'absolute',
+    top: -5,
+    alignItems: 'center',
+    transform: [{ translateX: -7 }],
+  },
+  milestoneDot: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#16213e',
+    borderWidth: 2,
+    borderColor: '#2a2a4e',
+  },
+  milestoneDotReached: {
+    backgroundColor: '#e94560',
+    borderColor: '#e94560',
+  },
+  milestoneLabel: {
+    color: '#444',
+    fontSize: 9,
+    marginTop: 3,
+    fontWeight: '600',
+  },
+  milestoneLabelReached: {
+    color: '#e94560',
+  },
+});
+
+const sheetStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: '#1a1a2e',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 12,
+    paddingBottom: 40,
+    paddingHorizontal: 20,
+  },
+  handle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#333',
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  photo: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginRight: 14,
+    backgroundColor: '#16213e',
+  },
+  photoPlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginRight: 14,
+    backgroundColor: '#16213e',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerInfo: {
+    flex: 1,
+  },
+  name: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  position: {
+    color: '#a0a0a0',
+    fontSize: 13,
+    marginTop: 2,
+  },
+  actions: {
+    gap: 2,
+  },
+  quickMoveRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+  },
+  quickBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#16213e',
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  quickBtnDisabled: {
+    backgroundColor: '#111',
+    opacity: 0.4,
+  },
+  quickBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  quickBtnTextDisabled: {
+    color: '#444',
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a4e',
+  },
+  actionTextArea: {
+    flex: 1,
+  },
+  actionText: {
+    color: '#ffffff',
+    fontSize: 16,
+  },
+  actionHint: {
+    color: '#555',
+    fontSize: 12,
+    marginTop: 1,
+  },
+  positionPicker: {
+    alignItems: 'center',
+  },
+  pickerTitle: {
+    color: '#a0a0a0',
+    fontSize: 14,
+    marginBottom: 16,
+    fontWeight: '600',
+  },
+  positionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  positionCell: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#16213e',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  positionCellCurrent: {
+    backgroundColor: '#e94560',
+  },
+  positionCellText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  positionCellTextCurrent: {
+    color: '#fff',
+  },
+  backButton: {
+    marginTop: 16,
+    paddingVertical: 8,
+  },
+  backButtonText: {
+    color: '#e94560',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  cancelButton: {
+    marginTop: 12,
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  cancelText: {
+    color: '#666',
+    fontSize: 16,
+  },
+});
+
+const swapStyles = StyleSheet.create({
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#e94560',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  text: {
+    color: '#fff',
+    fontSize: 14,
+    flex: 1,
+  },
+  name: {
+    fontWeight: '700',
+  },
+  cancel: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
   },
 });

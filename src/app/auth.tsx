@@ -24,7 +24,6 @@ export default function AuthScreen() {
     signIn,
     signUp,
     signInApple,
-    signInGoogle,
     isLoading,
     error,
     clearError,
@@ -52,11 +51,6 @@ export default function AuthScreen() {
     }
   };
 
-  const handleGoogle = async () => {
-    await signInGoogle();
-    // Google OAuth redirects — auth state change handles navigation
-  };
-
   const toggleMode = () => {
     setIsSignUp(!isSignUp);
     clearError();
@@ -71,13 +65,29 @@ export default function AuthScreen() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.header}>
-          <Text style={styles.logo}>🔥</Text>
-          <Text style={styles.title}>Tribal Picks</Text>
-          <Text style={styles.subtitle}>Survivor Fantasy</Text>
+        {/* Hero */}
+        <View style={styles.hero}>
+          <Text style={styles.appName}>Tribal Picks</Text>
+          <Text style={styles.tagline}>Fantasy Survivor, Reimagined</Text>
         </View>
 
-        {/* Social Sign-In Buttons */}
+        {/* Feature Highlights */}
+        <View style={styles.features}>
+          <View style={styles.featureRow}>
+            <Ionicons name="trophy-outline" size={22} color="#e94560" />
+            <Text style={styles.featureText}>Compete in leagues with friends</Text>
+          </View>
+          <View style={styles.featureRow}>
+            <Ionicons name="people-outline" size={22} color="#e94560" />
+            <Text style={styles.featureText}>Draft castaways & predict eliminations</Text>
+          </View>
+          <View style={styles.featureRow}>
+            <Ionicons name="stats-chart-outline" size={22} color="#e94560" />
+            <Text style={styles.featureText}>Track scores all season long</Text>
+          </View>
+        </View>
+
+        {/* Social Auth */}
         <View style={styles.socialButtons}>
           {Platform.OS === 'ios' && (
             <Pressable
@@ -86,22 +96,10 @@ export default function AuthScreen() {
               disabled={isLoading}
             >
               <Ionicons name="logo-apple" size={20} color="#fff" />
-              <Text style={styles.socialButtonText}>
-                {isSignUp ? 'Sign up with Apple' : 'Sign in with Apple'}
-              </Text>
+              <Text style={styles.socialButtonText}>Continue with Apple</Text>
             </Pressable>
           )}
 
-          <Pressable
-            style={[styles.socialButton, styles.googleButton]}
-            onPress={handleGoogle}
-            disabled={isLoading}
-          >
-            <Ionicons name="logo-google" size={20} color="#fff" />
-            <Text style={styles.socialButtonText}>
-              {isSignUp ? 'Sign up with Google' : 'Sign in with Google'}
-            </Text>
-          </Pressable>
         </View>
 
         {/* Divider */}
@@ -156,7 +154,7 @@ export default function AuthScreen() {
               <ActivityIndicator color="#fff" />
             ) : (
               <Text style={styles.emailButtonText}>
-                {isSignUp ? 'Create Account' : 'Sign In with Email'}
+                {isSignUp ? 'Create Account' : 'Sign In'}
               </Text>
             )}
           </Pressable>
@@ -183,25 +181,37 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     padding: 24,
+    paddingTop: 60,
   },
-  header: {
+  hero: {
     alignItems: 'center',
     marginBottom: 32,
   },
-  logo: {
-    fontSize: 48,
-    marginBottom: 8,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#e94560',
-  },
-  subtitle: {
-    fontSize: 16,
+  appName: {
+    fontSize: 36,
+    fontWeight: '800',
     color: '#ffffff',
-    opacity: 0.8,
-    marginTop: 4,
+    letterSpacing: 1,
+  },
+  tagline: {
+    fontSize: 16,
+    color: '#e94560',
+    marginTop: 8,
+    fontWeight: '500',
+  },
+  features: {
+    marginBottom: 32,
+    gap: 14,
+  },
+  featureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 8,
+  },
+  featureText: {
+    color: '#a0a0a0',
+    fontSize: 15,
   },
   socialButtons: {
     gap: 12,
@@ -217,9 +227,6 @@ const styles = StyleSheet.create({
   },
   appleButton: {
     backgroundColor: '#000000',
-  },
-  googleButton: {
-    backgroundColor: '#4285F4',
   },
   socialButtonText: {
     color: '#ffffff',

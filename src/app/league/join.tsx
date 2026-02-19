@@ -8,13 +8,14 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useLeagueStore } from '../../stores/useLeagueStore';
 import { joinLeagueByCode } from '../../services/supabase/queries';
 
 export default function JoinLeagueScreen() {
-  const [code, setCode] = useState('');
+  const { prefill } = useLocalSearchParams<{ prefill?: string }>();
+  const [code, setCode] = useState(prefill ?? '');
   const [isLoading, setIsLoading] = useState(false);
   const user = useAuthStore((s) => s.user);
   const invalidateLeagues = useLeagueStore((s) => s.invalidate);

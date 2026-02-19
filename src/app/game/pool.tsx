@@ -8,8 +8,11 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
+  ScrollView,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/useAuthStore';
 import {
   getCastaways,
@@ -39,6 +42,7 @@ export default function SurvivorPoolScreen() {
   const [isLocked, setIsLocked] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [showRules, setShowRules] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -156,11 +160,16 @@ export default function SurvivorPoolScreen() {
         <Text style={styles.headerTitle}>
           Episode {nextEpisode?.number ?? '?'}
         </Text>
-        <Text style={styles.headerSubtext}>
-          {isLocked
-            ? 'Picks are locked for this episode'
-            : 'Pick one castaway who will SURVIVE this episode'}
-        </Text>
+        <View style={styles.headerSubtextRow}>
+          <Text style={styles.headerSubtext}>
+            {isLocked
+              ? 'Picks are locked for this episode'
+              : 'Pick one castaway to survive this episode'}
+          </Text>
+          <Pressable onPress={() => setShowRules(true)} hitSlop={12}>
+            <Ionicons name="information-circle-outline" size={20} color="#a0a0a0" />
+          </Pressable>
+        </View>
         <View style={styles.statusBar}>
           <Text style={styles.statusAlive}>{aliveCount} alive</Text>
           <Text style={styles.statusDivider}>|</Text>
@@ -248,6 +257,36 @@ export default function SurvivorPoolScreen() {
           )}
         </Pressable>
       )}
+
+      <Modal
+        visible={showRules}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowRules(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Survivor Pool Rules</Text>
+            <ScrollView style={styles.modalScroll}>
+              <Text style={styles.ruleText}>
+                {'\u2022'} Pick one castaway per episode to SURVIVE.{'\n\n'}
+                {'\u2022'} You cannot reuse a castaway you{"'"}ve already picked.{'\n\n'}
+                {'\u2022'} If your pick is eliminated, YOU are out of the pool.{'\n\n'}
+                {'\u2022'} Last fantasy player still alive wins the pool.{'\n\n'}
+                {'\u2022'} Double tribal: if your pick is eliminated in any tribal council that episode, you{"'"}re out.{'\n\n'}
+                {'\u2022'} Medevac or quit counts as an elimination.{'\n\n'}
+                {'\u2022'} Recap/reunion episodes with no tribal council require no pick.
+              </Text>
+            </ScrollView>
+            <Pressable
+              style={styles.modalCloseButton}
+              onPress={() => setShowRules(false)}
+            >
+              <Text style={styles.modalCloseText}>Got It</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -277,10 +316,16 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     marginBottom: 4,
   },
+  headerSubtextRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginBottom: 12,
+  },
   headerSubtext: {
     fontSize: 13,
     color: '#a0a0a0',
-    marginBottom: 12,
   },
   statusBar: {
     flexDirection: 'row',
@@ -431,6 +476,48 @@ const styles = StyleSheet.create({
   saveButtonText: {
     color: '#ffffff',
     fontSize: 18,
+    fontWeight: 'bold',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxHeight: '80%',
+    borderWidth: 1,
+    borderColor: '#2a2a4e',
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#e94560',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  modalScroll: {
+    marginBottom: 16,
+  },
+  ruleText: {
+    color: '#ffffff',
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  modalCloseButton: {
+    backgroundColor: '#e94560',
+    borderRadius: 10,
+    padding: 14,
+    alignItems: 'center',
+  },
+  modalCloseText: {
+    color: '#ffffff',
+    fontSize: 16,
     fontWeight: 'bold',
   },
 });
