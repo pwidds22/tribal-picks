@@ -119,7 +119,7 @@ function EditPickSheet({
   currentPosition: number; // 0-indexed in the picked array
   totalPicked: number;
   positionOffset?: number;
-  onMoveToPosition: (newPosition: number) => void;
+  onMoveToPosition: (fromIndex: number, toIndex: number) => void;
   onSwapWith: () => void;
   onRemove: () => void;
   onClose: () => void;
@@ -181,8 +181,10 @@ function EditPickSheet({
                   ]}
                   onPress={() => {
                     if (currentPosition > 0) {
-                      onMoveToPosition(currentPosition - 1);
+                      const from = currentPosition;
+                      const to = currentPosition - 1;
                       onClose();
+                      setTimeout(() => onMoveToPosition(from, to), 300);
                     }
                   }}
                   disabled={currentPosition === 0}
@@ -209,8 +211,10 @@ function EditPickSheet({
                   ]}
                   onPress={() => {
                     if (currentPosition < totalPicked - 1) {
-                      onMoveToPosition(currentPosition + 1);
+                      const from = currentPosition;
+                      const to = currentPosition + 1;
                       onClose();
+                      setTimeout(() => onMoveToPosition(from, to), 300);
                     }
                   }}
                   disabled={currentPosition >= totalPicked - 1}
@@ -313,8 +317,10 @@ function EditPickSheet({
                       ]}
                       onPress={() => {
                         if (!isCurrent) {
-                          onMoveToPosition(i);
+                          const from = currentPosition;
+                          const to = i;
                           onClose();
+                          setTimeout(() => onMoveToPosition(from, to), 300);
                         }
                       }}
                       disabled={isCurrent}
@@ -500,18 +506,16 @@ export default function BracketScreen() {
 
   /** Move a castaway from one position to another (insert, not swap) */
   const handleMoveToPosition = useCallback(
-    (newPosition: number) => {
-      if (editingIndex === null) return;
+    (fromIndex: number, toIndex: number) => {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setPickedIds((prev) => {
         const next = [...prev];
-        const [removed] = next.splice(editingIndex, 1);
-        next.splice(newPosition, 0, removed);
+        const [removed] = next.splice(fromIndex, 1);
+        next.splice(toIndex, 0, removed);
         return next;
       });
-      setEditingIndex(null);
     },
-    [editingIndex],
+    [],
   );
 
   /** Enter swap mode: user will tap another pick to swap with */
