@@ -44,7 +44,7 @@ export const useMonetizationStore = create<MonetizationState>((set, get) => ({
     set({ isPremium });
 
     if (!isPremium) {
-      preloadInterstitial();
+      await preloadInterstitial();
     }
   },
 
@@ -53,7 +53,7 @@ export const useMonetizationStore = create<MonetizationState>((set, get) => ({
     const isPremium = await checkPremiumStatus();
     set({ isPremium });
     if (!isPremium) {
-      preloadInterstitial();
+      await preloadInterstitial();
     }
   },
 

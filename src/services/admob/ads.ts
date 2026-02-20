@@ -1,4 +1,4 @@
-import {
+import mobileAds, {
   InterstitialAd,
   AdEventType,
 } from 'react-native-google-mobile-ads';
@@ -8,8 +8,19 @@ let interstitial: InterstitialAd | null = null;
 let isLoaded = false;
 let retryTimeout: ReturnType<typeof setTimeout> | null = null;
 let retryCount = 0;
+let sdkInitialized = false;
 const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 5_000;
+
+export async function initializeAds(): Promise<void> {
+  if (sdkInitialized) return;
+  try {
+    await mobileAds().initialize();
+    sdkInitialized = true;
+  } catch {
+    // SDK init failed — ads won't load but app should not crash
+  }
+}
 
 function scheduleRetry(): void {
   if (retryCount >= MAX_RETRIES) return;
@@ -42,8 +53,9 @@ function createInterstitial(): void {
   interstitial.load();
 }
 
-export function preloadInterstitial(): void {
-  if (!interstitial) {
+export async function preloadInterstitial(): Promise<void> {
+  await initializeAds();
+  if (!interstitial && sdkInitialized) {
     createInterstitial();
   }
 }
