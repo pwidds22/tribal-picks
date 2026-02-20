@@ -45,14 +45,20 @@ export function scoreBracketEpisode(
  * Calculate the winner bonus for one user.
  * Returns WINNER_BONUS (50) if the user's highest-position pick
  * matches the actual Sole Survivor, else 0.
+ *
+ * @param winnerPosition  The predicted_position value that represents
+ *                        the Sole Survivor slot. For full-season leagues
+ *                        this equals total castaways (e.g., 24). For
+ *                        flex-start leagues it's the offset max position
+ *                        (e.g., 24 even if only 16 remain in the bracket).
  */
 export function getWinnerBonus(
   picks: BracketPick[],
   actualWinnerId: number,
-  totalCastaways: number,
+  winnerPosition: number,
 ): number {
   const winnerPick = picks.find(
-    (p) => p.predicted_position === totalCastaways,
+    (p) => p.predicted_position === winnerPosition,
   );
   if (winnerPick && winnerPick.castaway_id === actualWinnerId) {
     return BRACKET_ESCALATING.WINNER_BONUS;
