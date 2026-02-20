@@ -1,13 +1,14 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useLeagueStore } from '../../stores/useLeagueStore';
 import { useSeasonStore } from '../../stores/useSeasonStore';
 import { getMillisUntilLock } from '../../core/locks';
-import { getBracketPicks } from '../../services/supabase/queries';
+import { getBracketPicks, getSurvivorPoolPicks } from '../../services/supabase/queries';
 import type { League, GameType } from '../../core/types';
 
 // ---------- Constants ----------
@@ -133,40 +134,57 @@ function CountdownHero({
 function ActionBanner({
   leagues,
   hasActiveCountdown,
+  nextEpisodeId,
 }: {
   leagues: League[];
   hasActiveCountdown: boolean;
+  nextEpisodeId: number | null;
 }) {
   const bracketLeagues = useMemo(
     () => leagues.filter((l) => l.game_type === 'bracket'),
     [leagues],
   );
-  const poolLeagues = leagues.filter((l) => l.game_type === 'survivor_pool');
+  const poolLeagues = useMemo(
+    () => leagues.filter((l) => l.game_type === 'survivor_pool'),
+    [leagues],
+  );
 
-  // Track which bracket leagues still need picks
+  // Track which leagues still need picks — re-check on every focus
   const [leaguesNeedingPicks, setLeaguesNeedingPicks] = useState<League[]>([]);
 
-  useEffect(() => {
-    const user = useAuthStore.getState().user;
-    if (!user || bracketLeagues.length === 0) {
-      setLeaguesNeedingPicks([]);
-      return;
-    }
-    let cancelled = false;
-    Promise.all(
-      bracketLeagues.map(async (league) => {
-        const picks = await getBracketPicks(league.id, user.id);
-        return { league, hasPicks: picks.length > 0 };
-      }),
-    ).then((results) => {
-      if (!cancelled) {
-        setLeaguesNeedingPicks(
-          results.filter((r) => !r.hasPicks).map((r) => r.league),
-        );
+  useFocusEffect(
+    useCallback(() => {
+      const user = useAuthStore.getState().user;
+      const allLeagues = [...bracketLeagues, ...poolLeagues];
+      if (!user || allLeagues.length === 0) {
+        setLeaguesNeedingPicks([]);
+        return;
       }
-    });
-    return () => { cancelled = true; };
-  }, [bracketLeagues]);
+      let cancelled = false;
+      Promise.all(
+        allLeagues.map(async (league) => {
+          if (league.game_type === 'bracket') {
+            const picks = await getBracketPicks(league.id, user.id);
+            return { league, hasPicks: picks.length > 0 };
+          }
+          // Survivor pool — check if pick exists for next episode
+          if (nextEpisodeId) {
+            const picks = await getSurvivorPoolPicks(league.id, user.id);
+            const hasCurrentPick = picks.some((p) => p.episode_id === nextEpisodeId);
+            return { league, hasPicks: hasCurrentPick };
+          }
+          return { league, hasPicks: true };
+        }),
+      ).then((results) => {
+        if (!cancelled) {
+          setLeaguesNeedingPicks(
+            results.filter((r) => !r.hasPicks).map((r) => r.league),
+          );
+        }
+      });
+      return () => { cancelled = true; };
+    }, [bracketLeagues, poolLeagues, nextEpisodeId]),
+  );
 
   if (leagues.length === 0) {
     return (
@@ -184,13 +202,14 @@ function ActionBanner({
     );
   }
 
+  const totalNeeding = leaguesNeedingPicks.length;
+
   if (hasActiveCountdown) {
-    const totalNeeding = leaguesNeedingPicks.length;
     return (
       <Pressable
         style={bannerStyles.container}
         onPress={() => {
-          if (leaguesNeedingPicks.length > 0) {
+          if (totalNeeding > 0) {
             router.push(`/league/${leaguesNeedingPicks[0].id}`);
           }
         }}
@@ -199,13 +218,13 @@ function ActionBanner({
         <View style={bannerStyles.content}>
           <Text style={bannerStyles.headline}>
             {totalNeeding > 0
-              ? `${totalNeeding} bracket${totalNeeding > 1 ? 's' : ''} need${totalNeeding === 1 ? 's' : ''} picks`
+              ? `${totalNeeding} league${totalNeeding > 1 ? 's' : ''} need${totalNeeding === 1 ? 's' : ''} picks`
               : 'You\'re all set for premiere!'}
           </Text>
           <Text style={bannerStyles.subtitle}>
             {totalNeeding > 0
               ? 'Set your predictions before picks lock'
-              : 'Bracket picks are locked in'}
+              : 'All picks are locked in'}
           </Text>
         </View>
         {totalNeeding > 0 && (
@@ -216,30 +235,31 @@ function ActionBanner({
   }
 
   // Season is live
-  const activePoolCount = poolLeagues.length;
   return (
     <Pressable
       style={bannerStyles.container}
       onPress={() => {
-        if (poolLeagues.length > 0) {
-          router.push(`/league/${poolLeagues[0].id}`);
+        if (totalNeeding > 0) {
+          router.push(`/league/${leaguesNeedingPicks[0].id}`);
         }
       }}
     >
       <Ionicons name="timer-outline" size={22} color="#e94560" />
       <View style={bannerStyles.content}>
         <Text style={bannerStyles.headline}>
-          {activePoolCount > 0
-            ? `${activePoolCount} pool${activePoolCount > 1 ? 's' : ''} need picks this week`
+          {totalNeeding > 0
+            ? `${totalNeeding} league${totalNeeding > 1 ? 's' : ''} need${totalNeeding === 1 ? 's' : ''} picks this week`
             : 'Season in progress'}
         </Text>
         <Text style={bannerStyles.subtitle}>
-          {activePoolCount > 0
+          {totalNeeding > 0
             ? 'Pick before the episode airs'
             : 'Check your standings'}
         </Text>
       </View>
-      <Ionicons name="chevron-forward" size={18} color="#666" />
+      {totalNeeding > 0 && (
+        <Ionicons name="chevron-forward" size={18} color="#666" />
+      )}
     </Pressable>
   );
 }
@@ -383,6 +403,13 @@ export default function HomeScreen() {
     if (user) fetchLeagues(user.id);
   }, [user]);
 
+  // Re-fetch leagues whenever the home tab regains focus (e.g. after creating a league)
+  useFocusEffect(
+    useCallback(() => {
+      if (user) fetchLeagues(user.id);
+    }, [user]),
+  );
+
   useEffect(() => {
     const remaining = getMillisUntilLock(season?.premiere_date ?? null);
     setCountdownActive(remaining > 0);
@@ -449,6 +476,7 @@ export default function HomeScreen() {
         <ActionBanner
           leagues={leagues}
           hasActiveCountdown={countdownActive}
+          nextEpisodeId={nextEpisode?.id ?? null}
         />
 
         {/* Quick Actions */}

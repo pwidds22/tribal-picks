@@ -49,9 +49,13 @@ export async function signInWithApple() {
     throw new Error('Apple Sign-In is only available on iOS');
   }
 
-  const nonce = await Crypto.digestStringAsync(
+  // Generate raw nonce, then hash it for Apple
+  const rawNonce = Array.from(Crypto.getRandomBytes(32))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  const hashedNonce = await Crypto.digestStringAsync(
     Crypto.CryptoDigestAlgorithm.SHA256,
-    Crypto.getRandomBytes(32).toString()
+    rawNonce
   );
 
   const credential = await AppleAuthentication.signInAsync({
@@ -59,17 +63,18 @@ export async function signInWithApple() {
       AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
       AppleAuthentication.AppleAuthenticationScope.EMAIL,
     ],
-    nonce,
+    nonce: hashedNonce,
   });
 
   if (!credential.identityToken) {
     throw new Error('No identity token received from Apple');
   }
 
+  // Supabase expects the raw nonce — it hashes internally to verify
   const { data, error } = await supabase.auth.signInWithIdToken({
     provider: 'apple',
     token: credential.identityToken,
-    nonce,
+    nonce: rawNonce,
   });
 
   if (error) throw error;
