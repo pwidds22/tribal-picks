@@ -24,7 +24,7 @@ const slides: Slide[] = [
     icon: 'flame',
     title: 'The Fantasy Game\nfor Survivor Fans',
     description:
-      'Predict eliminations, draft castaways, and compete with friends all season long.',
+      'Predict eliminations and compete with friends all season long.',
   },
   {
     id: '2',

@@ -78,8 +78,8 @@ export default function AuthScreen() {
             <Text style={styles.featureText}>Compete in leagues with friends</Text>
           </View>
           <View style={styles.featureRow}>
-            <Ionicons name="people-outline" size={22} color="#e94560" />
-            <Text style={styles.featureText}>Draft castaways & predict eliminations</Text>
+            <Ionicons name="flash-outline" size={22} color="#e94560" />
+            <Text style={styles.featureText}>Predict eliminations & pick survivors</Text>
           </View>
           <View style={styles.featureRow}>
             <Ionicons name="stats-chart-outline" size={22} color="#e94560" />

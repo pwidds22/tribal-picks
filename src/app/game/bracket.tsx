@@ -384,6 +384,7 @@ export default function BracketScreen() {
   const user = useAuthStore((s) => s.user);
   const [castaways, setCastaways] = useState<Castaway[]>([]);
   const [pickedIds, setPickedIds] = useState<number[]>([]);
+  const [savedPickedIds, setSavedPickedIds] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
@@ -436,6 +437,7 @@ export default function BracketScreen() {
             .sort((a, b) => a.predicted_position - b.predicted_position)
             .map((p) => p.castaway_id);
           setPickedIds(savedOrder);
+          setSavedPickedIds(savedOrder);
         }
       }
     } catch (err) {
@@ -462,6 +464,10 @@ export default function BracketScreen() {
   const totalCastaways = castaways.length;
   const allPicked =
     pickedIds.length === totalCastaways && totalCastaways > 0;
+
+  const hasUnsavedChanges = allPicked &&
+    (savedPickedIds.length === 0 ||
+     pickedIds.some((id, i) => id !== savedPickedIds[i]));
 
   // --- CORE ACTIONS ---
 
@@ -561,6 +567,7 @@ export default function BracketScreen() {
       }));
 
       await saveBracketPicks(leagueId, user.id, picks);
+      setSavedPickedIds([...pickedIds]);
       Alert.alert(
         'Bracket Saved!',
         positionOffset > 0
@@ -839,14 +846,16 @@ export default function BracketScreen() {
       {/* Save button */}
       {!isLocked && allPicked && (
         <Pressable
-          style={[styles.saveButton, isSaving && styles.buttonDisabled]}
+          style={[styles.saveButton, (!hasUnsavedChanges || isSaving) && styles.buttonDisabled]}
           onPress={handleSave}
-          disabled={isSaving}
+          disabled={!hasUnsavedChanges || isSaving}
         >
           {isSaving ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.saveButtonText}>Save Bracket</Text>
+            <Text style={styles.saveButtonText}>
+              {hasUnsavedChanges ? 'Save Bracket' : 'Bracket Saved'}
+            </Text>
           )}
         </Pressable>
       )}

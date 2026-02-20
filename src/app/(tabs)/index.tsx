@@ -7,6 +7,7 @@ import { useAuthStore } from '../../stores/useAuthStore';
 import { useLeagueStore } from '../../stores/useLeagueStore';
 import { useSeasonStore } from '../../stores/useSeasonStore';
 import { getMillisUntilLock } from '../../core/locks';
+import { getBracketPicks } from '../../services/supabase/queries';
 import type { League, GameType } from '../../core/types';
 
 // ---------- Constants ----------
@@ -136,8 +137,36 @@ function ActionBanner({
   leagues: League[];
   hasActiveCountdown: boolean;
 }) {
-  const bracketLeagues = leagues.filter((l) => l.game_type === 'bracket');
+  const bracketLeagues = useMemo(
+    () => leagues.filter((l) => l.game_type === 'bracket'),
+    [leagues],
+  );
   const poolLeagues = leagues.filter((l) => l.game_type === 'survivor_pool');
+
+  // Track which bracket leagues still need picks
+  const [leaguesNeedingPicks, setLeaguesNeedingPicks] = useState<League[]>([]);
+
+  useEffect(() => {
+    const user = useAuthStore.getState().user;
+    if (!user || bracketLeagues.length === 0) {
+      setLeaguesNeedingPicks([]);
+      return;
+    }
+    let cancelled = false;
+    Promise.all(
+      bracketLeagues.map(async (league) => {
+        const picks = await getBracketPicks(league.id, user.id);
+        return { league, hasPicks: picks.length > 0 };
+      }),
+    ).then((results) => {
+      if (!cancelled) {
+        setLeaguesNeedingPicks(
+          results.filter((r) => !r.hasPicks).map((r) => r.league),
+        );
+      }
+    });
+    return () => { cancelled = true; };
+  }, [bracketLeagues]);
 
   if (leagues.length === 0) {
     return (
@@ -156,13 +185,13 @@ function ActionBanner({
   }
 
   if (hasActiveCountdown) {
-    const totalNeeding = bracketLeagues.length;
+    const totalNeeding = leaguesNeedingPicks.length;
     return (
       <Pressable
         style={bannerStyles.container}
         onPress={() => {
-          if (bracketLeagues.length > 0) {
-            router.push(`/league/${bracketLeagues[0].id}`);
+          if (leaguesNeedingPicks.length > 0) {
+            router.push(`/league/${leaguesNeedingPicks[0].id}`);
           }
         }}
       >
