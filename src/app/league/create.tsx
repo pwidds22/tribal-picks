@@ -65,7 +65,7 @@ const GAME_TYPES: GameTypeOption[] = [
       },
     ],
     strategyTip:
-      'Getting the pre-merge vs. post-merge divide right is huge — knowing WHO makes the merge matters more than exact boot order. The winner pick is your single highest-leverage decision.',
+      'Later episodes are worth way more, so getting the endgame right is key. The winner pick is your single highest-leverage decision.',
     scoringPreview: [
       'Each episode: episode # × correct "still alive" picks',
       'Later episodes are worth much more',

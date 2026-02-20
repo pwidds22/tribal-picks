@@ -48,11 +48,10 @@ function BracketProgress({
 }) {
   const pct = total > 0 ? filled / total : 0;
 
-  // Milestone positions (0-indexed): Merge ~position 10, Final 3 ~position 15, Winner = 17
+  // Milestone positions (0-indexed): Final 3 ~position 15, Winner = 17
   const milestones =
     total > 0
       ? [
-          { position: Math.floor(total * 0.56), label: 'Merge' },
           { position: total - 3, label: 'Final 3' },
           { position: total - 1, label: 'Winner' },
         ]
