@@ -20,6 +20,7 @@ export type Season = {
   premiere_date: string | null;
   finale_date: string | null;
   is_active: boolean;
+  winner_id: number | null;
 };
 
 export type Castaway = {
