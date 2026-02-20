@@ -41,9 +41,25 @@ export function getMillisUntilLock(dateStr: string | null): number {
   return Math.max(0, getLockTimeET(dateStr) - Date.now());
 }
 
-// Convert a date string to a lock timestamp (8 PM ET).
-// Uses -05:00 (EST). During EDT this is conservative by 1 hour
-// which is fine — locks slightly early rather than late.
+// Convert a date string to a lock timestamp (8 PM ET, DST-aware).
+// Uses Intl to detect whether the date falls in EST or EDT
+// and applies the correct UTC offset (-05:00 or -04:00).
 function getLockTimeET(dateStr: string): number {
-  return new Date(dateStr + 'T20:00:00-05:00').getTime();
+  const estGuess = new Date(`${dateStr}T20:00:00-05:00`);
+
+  try {
+    const nyHour = parseInt(
+      new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York',
+        hour: 'numeric',
+        hour12: false,
+      }).format(estGuess),
+      10,
+    );
+    // EST: nyHour === 20 (correct). EDT: nyHour === 21 (subtract 1hr).
+    return estGuess.getTime() - (nyHour - 20) * 3_600_000;
+  } catch {
+    // Fallback if Intl doesn't support timeZone: use EST
+    return estGuess.getTime();
+  }
 }

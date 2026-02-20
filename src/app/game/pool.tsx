@@ -27,17 +27,22 @@ import {
 } from '../../services/supabase/queries';
 import { getUsedCastaways } from '../../core/scoring';
 import { isEpisodeLocked, getLockDeadlineLabel } from '../../core/locks';
-import type { Castaway, Episode } from '../../core/types';
+import type { Castaway, Episode, Season } from '../../core/types';
+import { getEpisodes } from '../../services/supabase/queries';
 
 export default function SurvivorPoolScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
   const user = useAuthStore((s) => s.user);
 
   const [castaways, setCastaways] = useState<Castaway[]>([]);
+  const [allCastawaysList, setAllCastawaysList] = useState<Castaway[]>([]);
   const [nextEpisode, setNextEpisode] = useState<Episode | null>(null);
   const [usedIds, setUsedIds] = useState<number[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [savedId, setSavedId] = useState<number | null>(null);
+  const [winnerPickId, setWinnerPickId] = useState<number | null>(null);
+  const [savedWinnerPickId, setSavedWinnerPickId] = useState<number | null>(null);
+  const [isFinale, setIsFinale] = useState(false);
   const [isAlive, setIsAlive] = useState(true);
   const [poolStatus, setPoolStatus] = useState<
     { user_id: string; is_alive: boolean; username: string }[]
@@ -71,15 +76,24 @@ export default function SurvivorPoolScreen() {
         ? getNextEpisodeFromStart(season.id, startEp)
         : getNextEpisode(season.id);
 
-      const [allCastaways, episode] = await Promise.all([
+      const [allCastaways, episode, episodes] = await Promise.all([
         castawaysFetch,
         episodeFetch,
+        getEpisodes(season.id),
       ]);
 
       setCastaways(allCastaways.filter((c) => !c.is_eliminated));
+      setAllCastawaysList(allCastaways);
       setNextEpisode(episode);
       if (episode) {
         setIsLocked(isEpisodeLocked(episode.air_date));
+
+        // Detect finale: last episode of the season or matches finale_date
+        const maxEpNum = Math.max(...episodes.map((e) => e.number));
+        const finale =
+          episode.number === maxEpNum ||
+          (season.finale_date != null && episode.air_date === season.finale_date);
+        setIsFinale(finale);
       }
 
       if (leagueId && user) {
@@ -107,6 +121,10 @@ export default function SurvivorPoolScreen() {
           if (existingPick) {
             setSelectedId(existingPick.picked_castaway_id);
             setSavedId(existingPick.picked_castaway_id);
+            if (existingPick.winner_pick_id) {
+              setWinnerPickId(existingPick.winner_pick_id);
+              setSavedWinnerPickId(existingPick.winner_pick_id);
+            }
           }
         } else {
           setUsedIds(getUsedCastaways(picks));
@@ -127,14 +145,25 @@ export default function SurvivorPoolScreen() {
 
   const handleSave = async () => {
     if (!leagueId || !user || !nextEpisode || selectedId === null || isLocked) return;
+    if (isFinale && winnerPickId === null) {
+      Alert.alert('Pick a Winner', 'For the finale, you must also pick who you think will be the Sole Survivor.');
+      return;
+    }
 
     setIsSaving(true);
     try {
-      await saveSurvivorPoolPick(leagueId, user.id, nextEpisode.id, selectedId);
+      await saveSurvivorPoolPick(
+        leagueId, user.id, nextEpisode.id, selectedId,
+        isFinale && winnerPickId !== null ? winnerPickId : undefined,
+      );
       setSavedId(selectedId);
+      if (isFinale) setSavedWinnerPickId(winnerPickId);
+      const pickedName = castaways.find((c) => c.id === selectedId)?.name;
       Alert.alert(
         'Pick Saved!',
-        `You picked ${castaways.find((c) => c.id === selectedId)?.name} to survive this episode.`
+        isFinale
+          ? `Survivor pick and winner tiebreaker saved. Good luck in the finale!`
+          : `You picked ${pickedName} to survive this episode.`,
       );
     } catch (err: any) {
       Alert.alert('Error', err.message);
@@ -143,7 +172,9 @@ export default function SurvivorPoolScreen() {
     }
   };
 
-  const hasPendingChange = selectedId !== null && selectedId !== savedId;
+  const hasPendingChange =
+    (selectedId !== null && selectedId !== savedId) ||
+    (isFinale && winnerPickId !== savedWinnerPickId);
   const availableCount = castaways.filter((c) => !usedIds.includes(c.id)).length;
   const aliveCount = poolStatus.filter((s) => s.is_alive).length;
   const eliminatedCount = poolStatus.filter((s) => !s.is_alive).length;
@@ -176,6 +207,9 @@ export default function SurvivorPoolScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
+        {isFinale && (
+          <Text style={styles.finaleLabel}>FINALE</Text>
+        )}
         <Text style={styles.headerTitle}>
           Episode {nextEpisode?.number ?? '?'}
         </Text>
@@ -183,7 +217,9 @@ export default function SurvivorPoolScreen() {
           <Text style={styles.headerSubtext}>
             {isLocked
               ? 'Picks are locked for this episode'
-              : 'Pick one castaway to survive this episode'}
+              : isFinale
+                ? 'Pick a survivor + predict the winner'
+                : 'Pick one castaway to survive this episode'}
           </Text>
           <Pressable onPress={() => setShowRules(true)} hitSlop={12}>
             <Ionicons name="information-circle-outline" size={20} color="#a0a0a0" />
@@ -261,6 +297,53 @@ export default function SurvivorPoolScreen() {
         />
       )}
 
+      {/* Winner tiebreaker section (finale only) */}
+      {isFinale && !isLocked && (
+        <View style={styles.winnerSection}>
+          <Text style={styles.winnerSectionTitle}>TIEBREAKER: PICK THE WINNER</Text>
+          <Text style={styles.winnerSectionSubtext}>
+            Who will be the Sole Survivor? Used to break ties.
+          </Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.winnerScroll}
+          >
+            {allCastawaysList.filter((c) => !c.is_eliminated).map((c) => {
+              const isWinnerPick = c.id === winnerPickId;
+              return (
+                <Pressable
+                  key={c.id}
+                  style={[
+                    styles.winnerCard,
+                    isWinnerPick && styles.winnerCardSelected,
+                  ]}
+                  onPress={() => setWinnerPickId(c.id === winnerPickId ? null : c.id)}
+                >
+                  {c.photo_url ? (
+                    <Image source={{ uri: c.photo_url }} style={styles.winnerPhoto} />
+                  ) : (
+                    <Text style={styles.winnerEmoji}>🏝️</Text>
+                  )}
+                  <Text
+                    style={[
+                      styles.winnerName,
+                      isWinnerPick && styles.winnerNameSelected,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {c.name}
+                  </Text>
+                  {isWinnerPick && (
+                    <Ionicons name="trophy" size={14} color="#ffa502" style={{ marginTop: 2 }} />
+                  )}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
+
       {selectedId !== null && !isLocked && (
         <Pressable
           style={[styles.saveButton, (!hasPendingChange || isSaving) && styles.buttonDisabled]}
@@ -294,7 +377,9 @@ export default function SurvivorPoolScreen() {
                 {'\u2022'} If an episode has multiple tribal councils, a castaway eliminated in ANY tribal counts as eliminated. Choose carefully on double-elimination episodes.{'\n\n'}
                 {'\u2022'} Picks lock when the episode airs. You can change your pick up until lock time.{'\n\n'}
                 {'\u2022'} Medevac or quit counts as an elimination.{'\n\n'}
-                {'\u2022'} Recap/reunion episodes with no tribal council require no pick.
+                {'\u2022'} Recap/reunion episodes with no tribal council require no pick.{'\n\n'}
+                {'\u2022'} In the finale, anyone who makes the Final 3 is NOT eliminated — they survive.{'\n\n'}
+                {'\u2022'} Tiebreaker: For the finale, you also pick who you think will be the Sole Survivor. If multiple players are tied, the one who correctly predicted the winner wins.
               </Text>
             </ScrollView>
             <Pressable
@@ -538,5 +623,70 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  finaleLabel: {
+    color: '#ffa502',
+    fontSize: 12,
+    fontWeight: 'bold',
+    letterSpacing: 2,
+    marginBottom: 4,
+  },
+  winnerSection: {
+    backgroundColor: '#1a1a2e',
+    borderTopWidth: 1,
+    borderTopColor: '#2a2a4e',
+    paddingVertical: 16,
+    paddingBottom: 100,
+  },
+  winnerSectionTitle: {
+    color: '#ffa502',
+    fontSize: 13,
+    fontWeight: 'bold',
+    letterSpacing: 1,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  winnerSectionSubtext: {
+    color: '#a0a0a0',
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  winnerScroll: {
+    paddingHorizontal: 12,
+    gap: 10,
+  },
+  winnerCard: {
+    backgroundColor: '#16213e',
+    borderRadius: 10,
+    padding: 10,
+    alignItems: 'center',
+    width: 80,
+    borderWidth: 2,
+    borderColor: '#2a2a4e',
+  },
+  winnerCardSelected: {
+    borderColor: '#ffa502',
+    backgroundColor: '#2e2a1a',
+  },
+  winnerPhoto: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginBottom: 4,
+    backgroundColor: '#16213e',
+  },
+  winnerEmoji: {
+    fontSize: 24,
+    marginBottom: 4,
+  },
+  winnerName: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  winnerNameSelected: {
+    color: '#ffa502',
   },
 });

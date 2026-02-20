@@ -103,7 +103,7 @@ const GAME_TYPES: GameTypeOption[] = [
       {
         step: 'Winner',
         detail:
-          'Last person standing in the pool wins. If multiple survive to the finale, they share the win.',
+          'Last person standing wins. If tied at the finale, whoever correctly picked the Sole Survivor wins.',
       },
     ],
     strategyTip:

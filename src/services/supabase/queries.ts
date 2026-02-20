@@ -276,15 +276,20 @@ export async function saveSurvivorPoolPick(
   leagueId: string,
   userId: string,
   episodeId: number,
-  castawayId: number
+  castawayId: number,
+  winnerPickId?: number
 ): Promise<void> {
+  const row: Record<string, unknown> = {
+    league_id: leagueId,
+    user_id: userId,
+    episode_id: episodeId,
+    picked_castaway_id: castawayId,
+  };
+  if (winnerPickId !== undefined) {
+    row.winner_pick_id = winnerPickId;
+  }
   const { error } = await supabase.from('survivor_pool_picks').upsert(
-    {
-      league_id: leagueId,
-      user_id: userId,
-      episode_id: episodeId,
-      picked_castaway_id: castawayId,
-    },
+    row,
     { onConflict: 'league_id,user_id,episode_id' }
   );
 

@@ -111,6 +111,7 @@ export type SurvivorPoolPick = {
   episode_id: number;
   picked_castaway_id: number; // who they think survives
   is_alive: boolean;          // still in the pool?
+  winner_pick_id: number | null; // finale tiebreaker: who wins?
 };
 
 // ---------- Admin / Sync Types ----------
