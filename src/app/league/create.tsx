@@ -44,35 +44,33 @@ const GAME_TYPES: GameTypeOption[] = [
       { label: 'Season-Long', color: '#a0a0a0', bg: '#1a1a2e' },
     ],
     bullets: [
-      'Rank all 18 castaways from first out to Sole Survivor',
-      'Earn points at each elimination based on accuracy',
-      'Set before premiere, ride it out all season',
+      'Rank all castaways from first out to Sole Survivor',
+      'Scores update after every episode — track your standing all season',
+      'Later episodes are worth way more — comebacks happen',
     ],
     howItWorks: [
       {
         step: 'Before premiere',
-        detail: 'Rank all 18 castaways in your predicted elimination order',
+        detail: 'Rank all castaways in your predicted elimination order',
       },
       {
         step: 'Each episode',
         detail:
-          'When someone is voted out, you earn points based on how close you predicted their position',
+          'Score = episode number × how many of your "still alive" picks are correct',
       },
       {
         step: 'At finale',
         detail:
-          'Bonus points for nailing the Sole Survivor and endgame predictions',
+          '+50 bonus for correctly predicting the Sole Survivor',
       },
     ],
     strategyTip:
-      'Focus on the extremes — first boot and winner predictions are worth the most bonus points. Endgame positions are 10x more valuable than early boots.',
+      'Getting the pre-merge vs. post-merge divide right is huge — knowing WHO makes the merge matters more than exact boot order. The winner pick is your single highest-leverage decision.',
     scoringPreview: [
-      'Exact position = full points',
-      'Off by 1 = half points',
-      'Off by 2 = quarter points',
-      'Off by 3+ = no points',
-      'Winner bonus = +15 pts',
-      'First boot bonus = +5 pts',
+      'Each episode: episode # × correct "still alive" picks',
+      'Later episodes are worth much more',
+      'Sole Survivor bonus: +50 pts',
+      'Scores update live each week',
     ],
   },
   {
@@ -286,9 +284,7 @@ function GameTypeCard({
               >
                 SCORING
               </Text>
-              {option.scoringPreview
-                .filter((line) => !(startEpisode > 1 && line.includes('First boot')))
-                .map((line, i) => (
+              {option.scoringPreview.map((line, i) => (
                 <View key={i} style={cardStyles.scoreLine}>
                   <Ionicons
                     name="checkmark-circle"

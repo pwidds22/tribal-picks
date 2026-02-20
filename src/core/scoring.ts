@@ -1,7 +1,5 @@
 import {
-  BRACKET_POSITION_VALUES,
-  BRACKET_ACCURACY,
-  BRACKET_BONUSES,
+  BRACKET_ESCALATING,
   DRAFT_SCORING,
   WEEKLY_SCORING,
   type BracketPick,
@@ -10,142 +8,74 @@ import {
 
 // ============================================
 // Pure scoring functions — no side effects
-// NOTE: These functions are duplicated in the Supabase Edge Function
+// NOTE: Bracket scoring logic is duplicated in the Supabase Edge Function
 // `sync-results/index.ts` for server-side scoring. Keep both in sync!
 // ============================================
 
-/**
- * Get the base point value for a given elimination position.
- * Later positions (endgame) are worth significantly more.
- *
- * Falls back to a calculated value for non-18 castaway seasons.
- */
-export function getPositionBaseValue(
-  position: number,
-  totalCastaways: number = 18,
-): number {
-  // For standard 18-castaway season, use the lookup table
-  if (totalCastaways === 18 && BRACKET_POSITION_VALUES[position]) {
-    return BRACKET_POSITION_VALUES[position];
-  }
-
-  // Dynamic calculation for non-standard cast sizes:
-  // Linearly scale from 2 (first out) to 20 (winner)
-  const ratio = (position - 1) / Math.max(totalCastaways - 1, 1);
-  return Math.round(2 + ratio * 18);
-}
+// ---------- Bracket: Escalating Survival ----------
+// After each episode: episode_score = episode_number × correct_still_in_count
+// Winner bonus: +50 if Sole Survivor pick is correct
 
 /**
- * Get the accuracy multiplier based on prediction distance.
+ * Score one episode for one user's bracket.
+ *
+ * A castaway is in your "still in" set if predicted_position > totalElims.
+ * Episode score = episodeNumber × |your_still_in ∩ actual_still_in|.
+ *
+ * For flex-start leagues: predicted_position is already stored with offset
+ * (e.g., mid-season league starting after 8 elims stores positions 9-24),
+ * so no extra offset logic is needed here.
  */
-export function getAccuracyMultiplier(distance: number): number {
-  if (distance === 0) return BRACKET_ACCURACY.EXACT;
-  if (distance === 1) return BRACKET_ACCURACY.OFF_BY_1;
-  if (distance === 2) return BRACKET_ACCURACY.OFF_BY_2;
-  return BRACKET_ACCURACY.OFF_BY_3_PLUS;
-}
-
-/**
- * Score a single bracket pick using the escalating position-value system.
- *
- * Points = baseValue(actualPosition) * accuracyMultiplier(distance)
- *
- * - Exact match on position 18 (winner) = 20 * 1.0 = 20 pts
- * - Off by 1 on position 18 = 20 * 0.5 = 10 pts
- * - Off by 3+ on any position = 0 pts
- * - Exact match on position 1 (first boot) = 2 * 1.0 = 2 pts
- */
-export function scoreBracketPick(
-  predictedPosition: number,
-  actualPosition: number,
-  totalCastaways: number = 18,
-): number {
-  const distance = Math.abs(predictedPosition - actualPosition);
-  const baseValue = getPositionBaseValue(actualPosition, totalCastaways);
-  const multiplier = getAccuracyMultiplier(distance);
-
-  return Math.round(baseValue * multiplier);
-}
-
-/**
- * Score a full bracket (all picks for one user in one league).
- * Includes milestone bonuses for exceptional predictions.
- *
- * Scoring breakdown for 18-castaway season:
- * - Position points: sum of (baseValue * accuracy) for each scored pick
- * - Sole Survivor exact:     +15 bonus
- * - Perfect endgame (14-18): +10 bonus (all 5 exact)
- * - First boot exact:         +5 bonus
- *
- * Max possible: 146 (all exact positions) + 15 + 10 + 5 = 176 pts
- */
-export function scoreFullBracket(
+export function scoreBracketEpisode(
   picks: BracketPick[],
+  episodeNumber: number,
+  totalElims: number,
+  actualStillInIds: Set<number>,
+): number {
+  let correct = 0;
+  for (const pick of picks) {
+    if (pick.predicted_position > totalElims && actualStillInIds.has(pick.castaway_id)) {
+      correct++;
+    }
+  }
+  return episodeNumber * correct;
+}
+
+/**
+ * Calculate the winner bonus for one user.
+ * Returns WINNER_BONUS (50) if the user's highest-position pick
+ * matches the actual Sole Survivor, else 0.
+ */
+export function getWinnerBonus(
+  picks: BracketPick[],
+  actualWinnerId: number,
   totalCastaways: number,
 ): number {
-  let total = 0;
-  let endgameExactCount = 0;
-  const endgameStart = totalCastaways - 4; // positions 14-18 for 18-castaway season
-
-  for (const pick of picks) {
-    if (pick.actual_position === null) continue;
-
-    const pickPoints = scoreBracketPick(
-      pick.predicted_position,
-      pick.actual_position,
-      totalCastaways,
-    );
-    total += pickPoints;
-
-    // Track endgame accuracy for perfect endgame bonus
-    if (
-      pick.actual_position >= endgameStart &&
-      pick.predicted_position === pick.actual_position
-    ) {
-      endgameExactCount++;
-    }
-
-    // Sole Survivor exact bonus
-    if (
-      pick.predicted_position === totalCastaways &&
-      pick.actual_position === totalCastaways
-    ) {
-      total += BRACKET_BONUSES.SOLE_SURVIVOR_EXACT;
-    }
-
-    // First boot exact bonus
-    if (
-      pick.predicted_position === 1 &&
-      pick.actual_position === 1
-    ) {
-      total += BRACKET_BONUSES.FIRST_BOOT_EXACT;
-    }
+  const winnerPick = picks.find(
+    (p) => p.predicted_position === totalCastaways,
+  );
+  if (winnerPick && winnerPick.castaway_id === actualWinnerId) {
+    return BRACKET_ESCALATING.WINNER_BONUS;
   }
-
-  // Perfect endgame bonus: all 5 endgame positions (14-18) predicted exactly
-  if (endgameExactCount === 5) {
-    total += BRACKET_BONUSES.PERFECT_ENDGAME;
-  }
-
-  return total;
+  return 0;
 }
 
 /**
- * Calculate the maximum possible score for a season.
- * Useful for displaying percentage-based progress.
+ * Compute the theoretical maximum score for a perfect bracket.
+ *
+ * Perfect score = sum(episodeNumber × remainingCount) + WINNER_BONUS
+ *
+ * @param episodeRemainingCounts  Array where [i] = castaways remaining after episode i+1
+ *                                (0-indexed: [0] = remaining after ep 1, etc.)
  */
-export function getMaxBracketScore(totalCastaways: number = 18): number {
-  let positionTotal = 0;
-  for (let i = 1; i <= totalCastaways; i++) {
-    positionTotal += getPositionBaseValue(i, totalCastaways);
+export function getMaxEscalatingScore(
+  episodeRemainingCounts: number[],
+): number {
+  let max = BRACKET_ESCALATING.WINNER_BONUS;
+  for (let i = 0; i < episodeRemainingCounts.length; i++) {
+    max += (i + 1) * episodeRemainingCounts[i];
   }
-
-  return (
-    positionTotal +
-    BRACKET_BONUSES.SOLE_SURVIVOR_EXACT +
-    BRACKET_BONUSES.PERFECT_ENDGAME +
-    BRACKET_BONUSES.FIRST_BOOT_EXACT
-  );
+  return max;
 }
 
 /**
