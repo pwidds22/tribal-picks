@@ -1092,7 +1092,8 @@ const styles = StyleSheet.create({
 const progressStyles = StyleSheet.create({
   container: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 28,
     backgroundColor: '#0f0f23',
   },
   labelRow: {
