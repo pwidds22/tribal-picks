@@ -138,7 +138,9 @@ export async function getUserLeagues(userId: string): Promise<League[]> {
     .eq('user_id', userId);
 
   if (error) throw error;
-  return (data ?? []).map((d: any) => d.leagues).filter(Boolean);
+  return (data ?? [])
+    .map((d) => (d as unknown as { leagues: League | null }).leagues)
+    .filter((l): l is League => l != null);
 }
 
 export async function getLeague(leagueId: string): Promise<League | null> {
@@ -161,11 +163,14 @@ export async function getLeagueMembers(
     .eq('league_id', leagueId);
 
   if (error) throw error;
-  return (data ?? []).map((d: any) => ({
-    user_id: d.user_id,
-    username: d.profiles?.username ?? 'Unknown',
-    display_name: d.profiles?.display_name,
-  }));
+  return (data ?? []).map((d) => {
+    const row = d as unknown as { user_id: string; profiles: { username: string; display_name: string | null } | null };
+    return {
+      user_id: row.user_id,
+      username: row.profiles?.username ?? 'Unknown',
+      display_name: row.profiles?.display_name ?? null,
+    };
+  });
 }
 
 // ============================================
@@ -329,7 +334,7 @@ export async function getSurvivorPoolStatus(
     if (!existing || d.is_alive) {
       userMap.set(d.user_id, {
         is_alive: d.is_alive,
-        username: (d as any).profiles?.username ?? 'Unknown',
+        username: (d as unknown as { profiles?: { username: string } }).profiles?.username ?? 'Unknown',
       });
     }
   }
@@ -374,6 +379,14 @@ export async function getSurvivorPoolStandings(
 
   if (error) throw error;
   return data ?? [];
+}
+
+export async function deleteLeague(leagueId: string): Promise<void> {
+  const { error } = await supabase
+    .from('leagues')
+    .delete()
+    .eq('id', leagueId);
+  if (error) throw new Error(error.message);
 }
 
 // ============================================

@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import type { League } from '../core/types';
-import { getUserLeagues } from '../services/supabase/queries';
-import { supabase } from '../services/supabase/client';
+import { getUserLeagues, deleteLeague as deleteLeagueQuery } from '../services/supabase/queries';
 
 type LeagueState = {
   leagues: League[];
@@ -29,17 +28,13 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
     try {
       const leagues = await getUserLeagues(userId);
       set({ leagues, isLoading: false, lastFetched: Date.now() });
-    } catch (err: any) {
-      set({ error: err.message, isLoading: false });
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : 'An error occurred', isLoading: false });
     }
   },
 
   deleteLeague: async (leagueId: string) => {
-    const { error } = await supabase
-      .from('leagues')
-      .delete()
-      .eq('id', leagueId);
-    if (error) throw new Error(error.message);
+    await deleteLeagueQuery(leagueId);
     set((state) => ({
       leagues: state.leagues.filter((l) => l.id !== leagueId),
     }));

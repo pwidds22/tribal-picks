@@ -8,8 +8,18 @@ import {
 
 // ============================================
 // Pure scoring functions — no side effects
-// NOTE: Bracket scoring logic is duplicated in the Supabase Edge Function
-// `sync-results/index.ts` for server-side scoring. Keep both in sync!
+//
+// WARNING: Bracket scoring logic is duplicated in the Supabase Edge Function
+// `sync-results/index.ts` for server-side scoring. Any changes here MUST be
+// mirrored in the Edge Function. There are no automated tests to verify
+// client and server scoring are in sync — verify manually after changes.
+//
+// Edge cases handled by the scoring system:
+// - Double elimination: two tribals in one episode both counted (totalElims incremented twice)
+// - Medevac/Quit: treated as an elimination (increments elimination_order)
+// - No tribal (recap/reunion): no scoring for that episode
+// - Idol play: scored based on FINAL result (whoever actually went home)
+// - Fire-making (F4): loser is eliminated normally
 // ============================================
 
 // ---------- Bracket: Escalating Survival ----------

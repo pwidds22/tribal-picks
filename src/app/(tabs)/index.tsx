@@ -9,39 +9,8 @@ import { useLeagueStore } from '../../stores/useLeagueStore';
 import { useSeasonStore } from '../../stores/useSeasonStore';
 import { getMillisUntilLock } from '../../core/locks';
 import { getBracketPicks, getSurvivorPoolPicks } from '../../services/supabase/queries';
-import type { League, GameType } from '../../core/types';
-
-// ---------- Constants ----------
-
-const GAME_TYPE_META: Record<
-  string,
-  {
-    label: string;
-    icon: keyof typeof Ionicons.glyphMap;
-    accentColor: string;
-  }
-> = {
-  bracket: {
-    label: 'Elimination Bracket',
-    icon: 'git-branch-outline',
-    accentColor: '#e94560',
-  },
-  survivor_pool: {
-    label: 'Survivor Pool',
-    icon: 'skull-outline',
-    accentColor: '#ffa502',
-  },
-  draft: {
-    label: 'Cast Draft',
-    icon: 'swap-horizontal-outline',
-    accentColor: '#4ecdc4',
-  },
-  weekly: {
-    label: "Weekly Pick'em",
-    icon: 'calendar-outline',
-    accentColor: '#a29bfe',
-  },
-};
+import { GAME_TYPE_META } from '../../core/gameTypes';
+import type { League } from '../../core/types';
 
 // ---------- Sub-Components ----------
 
@@ -293,7 +262,7 @@ function LeagueCardEnhanced({
           ]}
         >
           <Ionicons
-            name={meta.icon}
+            name={meta.icon as keyof typeof Ionicons.glyphMap}
             size={20}
             color={meta.accentColor}
           />

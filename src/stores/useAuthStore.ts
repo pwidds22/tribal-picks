@@ -40,8 +40,8 @@ export const useAuthStore = create<AuthState>((set) => ({
           isLoading: false,
         });
       }
-    } catch (err: any) {
-      set({ error: err.message, isLoading: false });
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : 'An error occurred', isLoading: false });
     }
   },
 
@@ -57,8 +57,8 @@ export const useAuthStore = create<AuthState>((set) => ({
           isLoading: false,
         });
       }
-    } catch (err: any) {
-      set({ error: err.message, isLoading: false });
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : 'An error occurred', isLoading: false });
     }
   },
 
@@ -67,13 +67,13 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       await signInWithApple();
       set({ isLoading: false });
-    } catch (err: any) {
+    } catch (err) {
       // User cancelled is not an error
-      if (err.code === 'ERR_REQUEST_CANCELED') {
+      if (err instanceof Error && 'code' in err && (err as { code: string }).code === 'ERR_REQUEST_CANCELED') {
         set({ isLoading: false });
         return;
       }
-      set({ error: err.message, isLoading: false });
+      set({ error: err instanceof Error ? err.message : 'An error occurred', isLoading: false });
     }
   },
 
@@ -82,8 +82,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       await signInWithGoogle();
       set({ isLoading: false });
-    } catch (err: any) {
-      set({ error: err.message, isLoading: false });
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : 'An error occurred', isLoading: false });
     }
   },
 
@@ -91,8 +91,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       await authSignOut();
       set({ user: null, profile: null });
-    } catch (err: any) {
-      set({ error: err.message });
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : 'An error occurred' });
     }
   },
 

@@ -32,8 +32,8 @@ export const useSeasonStore = create<SeasonState>((set, get) => ({
         nextEpisode = await getNextEpisode(season.id);
       }
       set({ season, nextEpisode, isLoading: false, lastFetched: Date.now() });
-    } catch (err: any) {
-      set({ error: err.message, isLoading: false });
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : 'An error occurred', isLoading: false });
     }
   },
 }));

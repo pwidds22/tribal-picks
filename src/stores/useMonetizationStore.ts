@@ -72,8 +72,8 @@ export const useMonetizationStore = create<MonetizationState>((set, get) => ({
     try {
       const offerings = await getOfferings();
       set({ offerings, isLoading: false });
-    } catch (err: any) {
-      set({ error: err.message, isLoading: false });
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : 'An error occurred', isLoading: false });
     }
   },
 
@@ -83,12 +83,12 @@ export const useMonetizationStore = create<MonetizationState>((set, get) => ({
       const isPremium = await purchasePackage(pkg);
       set({ isPremium, isLoading: false });
       return isPremium;
-    } catch (err: any) {
-      if (err.userCancelled) {
+    } catch (err) {
+      if (err instanceof Error && 'userCancelled' in err) {
         set({ isLoading: false });
         return false;
       }
-      set({ error: err.message, isLoading: false });
+      set({ error: err instanceof Error ? err.message : 'An error occurred', isLoading: false });
       return false;
     }
   },
@@ -99,8 +99,8 @@ export const useMonetizationStore = create<MonetizationState>((set, get) => ({
       const isPremium = await restorePurchases();
       set({ isPremium, isLoading: false });
       return isPremium;
-    } catch (err: any) {
-      set({ error: err.message, isLoading: false });
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : 'An error occurred', isLoading: false });
       return false;
     }
   },

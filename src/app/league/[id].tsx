@@ -66,8 +66,7 @@ export default function LeagueDetailScreen() {
         setPoolStandings(ranked);
         setMemberCount(ranked.length);
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
       Alert.alert('Error', 'Failed to load league data. Please try again.');
     } finally {
       setIsLoading(false);
@@ -109,8 +108,8 @@ export default function LeagueDetailScreen() {
             try {
               await deleteLeague(id!);
               router.replace('/(tabs)/leagues');
-            } catch (err: any) {
-              Alert.alert('Error', err.message ?? 'Failed to delete league.');
+            } catch (err) {
+              Alert.alert('Error', err instanceof Error ? err.message : 'Failed to delete league.');
               setIsDeleting(false);
             }
           },

@@ -124,8 +124,8 @@ export default function PicksScreen() {
       );
 
       setPickStatuses(statuses);
-    } catch (err) {
-      console.error('Failed to check pick statuses:', err);
+    } catch {
+      // Silently fail — user sees empty state
     } finally {
       setIsLoading(false);
     }

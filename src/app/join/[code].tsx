@@ -30,8 +30,8 @@ export default function JoinByCodeScreen() {
       const league = await joinLeagueByCode(code, user.id);
       invalidateLeagues();
       router.replace(`/league/${league.id}`);
-    } catch (err: any) {
-      Alert.alert('Could Not Join', err.message, [
+    } catch (err) {
+      Alert.alert('Could Not Join', err instanceof Error ? err.message : 'Unknown error', [
         { text: 'OK', onPress: () => router.replace('/(tabs)/leagues') },
       ]);
     } finally {

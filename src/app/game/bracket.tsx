@@ -440,8 +440,7 @@ export default function BracketScreen() {
           setSavedPickedIds(savedOrder);
         }
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
       Alert.alert('Error', 'Failed to load bracket data. Please try again.');
     } finally {
       setIsLoading(false);
@@ -574,8 +573,8 @@ export default function BracketScreen() {
           ? 'Your elimination bracket has been saved. You can update it until the start episode airs.'
           : 'Your elimination bracket has been saved. You can update it until the season premiere.',
       );
-    } catch (err: any) {
-      Alert.alert('Error', err.message);
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save bracket.');
     } finally {
       setIsSaving(false);
     }

@@ -1,19 +1,6 @@
 import { Text, Pressable, StyleSheet } from 'react-native';
-import type { League, GameType } from '../core/types';
-
-const GAME_TYPE_LABELS: Record<GameType, string> = {
-  bracket: 'Elimination Bracket',
-  draft: 'Cast Draft',
-  weekly: "Weekly Pick'em",
-  survivor_pool: 'Survivor Pool',
-};
-
-const GAME_TYPE_COLORS: Record<GameType, string> = {
-  bracket: '#e94560',
-  draft: '#4ecdc4',
-  weekly: '#ffa502',
-  survivor_pool: '#2ed573',
-};
+import type { League } from '../core/types';
+import { GAME_TYPE_META } from '../core/gameTypes';
 
 type Props = {
   league: League;
@@ -21,12 +8,13 @@ type Props = {
 };
 
 export default function LeagueCard({ league, onPress }: Props) {
-  const color = GAME_TYPE_COLORS[league.game_type] ?? '#e94560';
+  const meta = GAME_TYPE_META[league.game_type];
+  const color = meta?.accentColor ?? '#e94560';
   return (
     <Pressable style={[styles.card, { borderLeftColor: color }]} onPress={onPress}>
       <Text style={styles.name}>{league.name}</Text>
       <Text style={[styles.gameType, { color }]}>
-        {GAME_TYPE_LABELS[league.game_type] ?? league.game_type}
+        {meta?.label ?? league.game_type}
       </Text>
     </Pressable>
   );

@@ -8,10 +8,7 @@ let initialized = false;
 
 export function configureRevenueCat(userId?: string): void {
   if (initialized) return;
-  if (!isValidKey) {
-    console.warn('RevenueCat: No valid API key (expected appl_...). Subscriptions disabled.');
-    return;
-  }
+  if (!isValidKey) return;
 
   if (Platform.OS !== 'ios') return;
 

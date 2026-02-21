@@ -130,8 +130,7 @@ export default function SurvivorPoolScreen() {
           setUsedIds(getUsedCastaways(picks));
         }
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
       Alert.alert('Error', 'Failed to load pool data. Please try again.');
     } finally {
       setIsLoading(false);
@@ -165,8 +164,8 @@ export default function SurvivorPoolScreen() {
           ? `Survivor pick and winner tiebreaker saved. Good luck in the finale!`
           : `You picked ${pickedName} to survive this episode.`,
       );
-    } catch (err: any) {
-      Alert.alert('Error', err.message);
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save pick.');
     } finally {
       setIsSaving(false);
     }
