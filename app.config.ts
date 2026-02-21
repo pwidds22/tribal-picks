@@ -1,8 +1,5 @@
 import { ExpoConfig, ConfigContext } from 'expo/config';
 
-const ADMOB_IOS_TEST_APP_ID = 'ca-app-pub-3940256099942544~1458002511';
-const ADMOB_ANDROID_TEST_APP_ID = 'ca-app-pub-3940256099942544~3347511713';
-
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'Tribal Picks: Survivor Fantasy',
@@ -29,13 +26,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     'expo-router',
     'expo-font',
     'expo-apple-authentication',
-    [
-      'react-native-google-mobile-ads',
-      {
-        androidAppId: process.env.ADMOB_APP_ID || ADMOB_ANDROID_TEST_APP_ID,
-        iosAppId: process.env.ADMOB_APP_ID || ADMOB_IOS_TEST_APP_ID,
-      },
-    ],
   ],
   experiments: {
     typedRoutes: true,
