@@ -199,5 +199,4 @@ export const DRAFT_SCORING = {
 export const WEEKLY_SCORING = {
   CORRECT_VOTE_OUT: 10,
   CORRECT_IMMUNITY: 10,
-  CORRECT_VOTE_SPLIT_BONUS: 5,
 } as const;
