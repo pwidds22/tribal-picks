@@ -188,3 +188,18 @@ create policy "Users can insert own pool picks" on survivor_pool_picks
   for insert with check (auth.uid() = user_id);
 create policy "Users can update own pool picks" on survivor_pool_picks
   for update using (auth.uid() = user_id);
+
+-- ============================================
+-- Account Deletion (Apple App Store 5.1.1(v))
+-- ============================================
+-- SECURITY DEFINER runs as the postgres owner,
+-- which has permission to delete from auth.users.
+-- Cascading FKs clean up profiles, picks, etc.
+create or replace function delete_own_account()
+returns void
+language sql
+security definer
+set search_path = ''
+as $$
+  delete from auth.users where id = auth.uid();
+$$;

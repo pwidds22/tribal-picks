@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, Linking, Alert } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Linking, Alert, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/useAuthStore';
@@ -70,7 +70,7 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
+      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         <Text style={styles.title}>Profile</Text>
 
         <View style={styles.card}>
@@ -124,9 +124,10 @@ export default function ProfileScreen() {
         </Pressable>
 
         <Pressable style={styles.deleteButton} onPress={handleDeleteAccount}>
+          <Ionicons name="trash-outline" size={18} color="#ff4757" style={styles.deleteIcon} />
           <Text style={styles.deleteText}>Delete Account</Text>
         </Pressable>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -143,7 +144,10 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  contentContainer: {
     padding: 20,
+    paddingBottom: 40,
   },
   title: {
     fontSize: 24,
@@ -205,13 +209,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   deleteButton: {
-    borderRadius: 10,
-    paddingVertical: 14,
+    flexDirection: 'row' as const,
+    justifyContent: 'center' as const,
     alignItems: 'center' as const,
-    marginTop: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#ff4757',
+    paddingVertical: 14,
+    marginTop: 12,
+  },
+  deleteIcon: {
+    marginRight: 8,
   },
   deleteText: {
-    color: '#666',
-    fontSize: 14,
+    color: '#ff4757',
+    fontWeight: 'bold' as const,
+    fontSize: 16,
   },
 });
