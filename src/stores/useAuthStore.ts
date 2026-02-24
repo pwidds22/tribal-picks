@@ -6,6 +6,7 @@ import {
   signInWithApple,
   signInWithGoogle,
   signOut as authSignOut,
+  deleteAccount as authDeleteAccount,
   getProfile,
   onAuthStateChange,
 } from '../services/supabase/auth';
@@ -20,6 +21,7 @@ type AuthState = {
   signInApple: () => Promise<void>;
   signInGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
   initialize: () => () => void;
   clearError: () => void;
 };
@@ -93,6 +95,16 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ user: null, profile: null });
     } catch (err) {
       set({ error: err instanceof Error ? err.message : 'An error occurred' });
+    }
+  },
+
+  deleteAccount: async () => {
+    try {
+      await authDeleteAccount();
+      set({ user: null, profile: null });
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : 'An error occurred' });
+      throw err;
     }
   },
 

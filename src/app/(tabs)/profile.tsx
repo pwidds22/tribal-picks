@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, Linking } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Linking, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/useAuthStore';
@@ -13,7 +13,42 @@ export default function ProfileScreen() {
   const profile = useAuthStore((s) => s.profile);
   const authLoading = useAuthStore((s) => s.isLoading);
   const signOut = useAuthStore((s) => s.signOut);
+  const deleteAccount = useAuthStore((s) => s.deleteAccount);
   const leagueCount = useLeagueStore((s) => s.leagues.length);
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'This will permanently delete your account and all your data (leagues, picks, scores). This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Are you sure?',
+              'This is your last chance. All data will be permanently deleted.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete My Account',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await deleteAccount();
+                    } catch {
+                      Alert.alert('Error', 'Failed to delete account. Please try again.');
+                    }
+                  },
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
+  };
 
   if (authLoading && !user) {
     return (
@@ -86,6 +121,10 @@ export default function ProfileScreen() {
 
         <Pressable style={styles.signOutButton} onPress={signOut}>
           <Text style={styles.signOutText}>Sign Out</Text>
+        </Pressable>
+
+        <Pressable style={styles.deleteButton} onPress={handleDeleteAccount}>
+          <Text style={styles.deleteText}>Delete Account</Text>
         </Pressable>
       </View>
     </SafeAreaView>
@@ -164,5 +203,15 @@ const styles = StyleSheet.create({
     color: '#ff4757',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  deleteButton: {
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center' as const,
+    marginTop: 8,
+  },
+  deleteText: {
+    color: '#666',
+    fontSize: 14,
   },
 });
