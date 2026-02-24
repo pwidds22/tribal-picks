@@ -18,7 +18,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     supportsTablet: true,
     bundleIdentifier: 'com.tribalpicks.survivorfantasy',
-    buildNumber: '6',
+    buildNumber: '7',
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
     },
