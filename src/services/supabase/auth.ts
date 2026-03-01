@@ -152,6 +152,27 @@ export async function deleteAccount() {
 }
 
 // ============================================
+// Profile Updates
+// ============================================
+
+export async function updateDisplayName(userId: string, displayName: string) {
+  const trimmed = displayName.trim();
+  if (trimmed.length === 0 || trimmed.length > 30) {
+    throw new Error('Display name must be 1-30 characters');
+  }
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({ display_name: trimmed })
+    .eq('id', userId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+// ============================================
 // Helpers
 // ============================================
 

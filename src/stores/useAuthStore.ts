@@ -9,6 +9,7 @@ import {
   deleteAccount as authDeleteAccount,
   getProfile,
   onAuthStateChange,
+  updateDisplayName as authUpdateDisplayName,
 } from '../services/supabase/auth';
 
 type AuthState = {
@@ -22,6 +23,7 @@ type AuthState = {
   signInGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
+  updateDisplayName: (name: string) => Promise<void>;
   initialize: () => () => void;
   clearError: () => void;
 };
@@ -106,6 +108,13 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ error: err instanceof Error ? err.message : 'An error occurred' });
       throw err;
     }
+  },
+
+  updateDisplayName: async (name) => {
+    const state = useAuthStore.getState();
+    if (!state.user) throw new Error('Not signed in');
+    const updated = await authUpdateDisplayName(state.user.id, name);
+    set({ profile: updated });
   },
 
   initialize: () => {

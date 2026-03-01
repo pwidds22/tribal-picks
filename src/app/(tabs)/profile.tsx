@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, Linking, Alert, ScrollView } from 'react-native';
+import { useState } from 'react';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Linking, Alert, ScrollView, TextInput, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/useAuthStore';
@@ -14,7 +15,34 @@ export default function ProfileScreen() {
   const authLoading = useAuthStore((s) => s.isLoading);
   const signOut = useAuthStore((s) => s.signOut);
   const deleteAccount = useAuthStore((s) => s.deleteAccount);
+  const updateDisplayName = useAuthStore((s) => s.updateDisplayName);
   const leagueCount = useLeagueStore((s) => s.leagues.length);
+
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleEditName = () => {
+    setNameInput(profile?.display_name ?? '');
+    setEditingName(true);
+  };
+
+  const handleSaveName = async () => {
+    const trimmed = nameInput.trim();
+    if (!trimmed || trimmed.length > 30) {
+      Alert.alert('Invalid Name', 'Display name must be 1-30 characters.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateDisplayName(trimmed);
+      setEditingName(false);
+    } catch {
+      Alert.alert('Error', 'Failed to update display name. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleDeleteAccount = () => {
     Alert.alert(
@@ -75,21 +103,26 @@ export default function ProfileScreen() {
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Account</Text>
+          <Pressable style={styles.infoRow} onPress={handleEditName}>
+            <Text style={styles.infoLabel}>Display Name</Text>
+            <View style={styles.editableValue}>
+              <Text style={styles.infoValue}>
+                {profile?.display_name || 'Set name'}
+              </Text>
+              <Ionicons name="pencil" size={14} color="#a0a0a0" style={{ marginLeft: 6 }} />
+            </View>
+          </Pressable>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Username</Text>
             <Text style={styles.infoValue}>
               {profile?.username ?? 'Unknown'}
             </Text>
           </View>
-          {profile?.display_name && (
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Display Name</Text>
-              <Text style={styles.infoValue}>{profile.display_name}</Text>
-            </View>
-          )}
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Email</Text>
-            <Text style={styles.infoValue}>{user.email}</Text>
+            <Text style={styles.infoValue} numberOfLines={1} ellipsizeMode="middle">
+              {user.email}
+            </Text>
           </View>
         </View>
 
@@ -128,6 +161,53 @@ export default function ProfileScreen() {
           <Text style={styles.deleteText}>Delete Account</Text>
         </Pressable>
       </ScrollView>
+
+      <Modal
+        visible={editingName}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEditingName(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setEditingName(false)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Edit Display Name</Text>
+            <Text style={styles.modalSubtitle}>
+              This is how other players see you in leagues and leaderboards.
+            </Text>
+            <TextInput
+              style={styles.nameInput}
+              value={nameInput}
+              onChangeText={setNameInput}
+              placeholder="Your display name"
+              placeholderTextColor="#666"
+              maxLength={30}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={handleSaveName}
+            />
+            <Text style={styles.charCount}>{nameInput.trim().length}/30</Text>
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={styles.cancelButton}
+                onPress={() => setEditingName(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+                onPress={handleSaveName}
+                disabled={saving}
+              >
+                {saving ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.saveButtonText}>Save</Text>
+                )}
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -223,6 +303,82 @@ const styles = StyleSheet.create({
   },
   deleteText: {
     color: '#ff4757',
+    fontWeight: 'bold' as const,
+    fontSize: 16,
+  },
+  editableValue: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%' as const,
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold' as const,
+    color: '#ffffff',
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#a0a0a0',
+    marginBottom: 20,
+  },
+  nameInput: {
+    backgroundColor: '#0f0f23',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#2a2a4e',
+    padding: 14,
+    fontSize: 16,
+    color: '#ffffff',
+  },
+  charCount: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'right' as const,
+    marginTop: 4,
+    marginBottom: 20,
+  },
+  modalButtons: {
+    flexDirection: 'row' as const,
+    gap: 12,
+  },
+  cancelButton: {
+    flex: 1,
+    backgroundColor: '#2a2a4e',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center' as const,
+  },
+  cancelButtonText: {
+    color: '#a0a0a0',
+    fontWeight: '600' as const,
+    fontSize: 16,
+  },
+  saveButton: {
+    flex: 1,
+    backgroundColor: '#e94560',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center' as const,
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
+  },
+  saveButtonText: {
+    color: '#ffffff',
     fontWeight: 'bold' as const,
     fontSize: 16,
   },
