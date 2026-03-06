@@ -24,11 +24,13 @@ import {
   getSurvivorPoolPicks,
   saveSurvivorPoolPick,
   getSurvivorPoolStatus,
+  getAllPoolPicksForEpisode,
+  getLeagueMembers,
+  getEpisodes,
 } from '../../services/supabase/queries';
 import { getUsedCastaways } from '../../core/scoring';
 import { isEpisodeLocked, getLockDeadlineLabel } from '../../core/locks';
 import type { Castaway, Episode, Season } from '../../core/types';
-import { getEpisodes } from '../../services/supabase/queries';
 
 export default function SurvivorPoolScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
@@ -51,6 +53,9 @@ export default function SurvivorPoolScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [showRules, setShowRules] = useState(false);
+  const [leaguePicks, setLeaguePicks] = useState<
+    { userName: string; castawayName: string; isAlive: boolean }[]
+  >([]);
 
   useEffect(() => {
     loadData();
@@ -94,6 +99,24 @@ export default function SurvivorPoolScreen() {
           episode.number === maxEpNum ||
           (season.finale_date != null && episode.air_date === season.finale_date);
         setIsFinale(finale);
+      }
+
+      // Fetch league-wide picks when episode is locked
+      if (leagueId && episode && isEpisodeLocked(episode.air_date)) {
+        const [allPicks, members] = await Promise.all([
+          getAllPoolPicksForEpisode(leagueId, episode.id),
+          getLeagueMembers(leagueId),
+        ]);
+        const memberMap = new Map(
+          members.map((m) => [m.user_id, m.display_name ?? m.username])
+        );
+        setLeaguePicks(
+          allPicks.map((p) => ({
+            userName: memberMap.get(p.user_id) ?? 'Unknown',
+            castawayName: p.castaway_name,
+            isAlive: p.is_alive,
+          }))
+        );
       }
 
       if (leagueId && user) {
@@ -248,6 +271,11 @@ export default function SurvivorPoolScreen() {
           numColumns={2}
           columnWrapperStyle={styles.columnWrapper}
           contentContainerStyle={styles.listContent}
+          ListFooterComponent={
+            isLocked && leaguePicks.length > 0 ? (
+              <LeaguePicksSection picks={leaguePicks} />
+            ) : null
+          }
           renderItem={({ item }) => {
             const isSelected = item.id === selectedId;
             const isUsed = usedIds.includes(item.id);
@@ -390,6 +418,39 @@ export default function SurvivorPoolScreen() {
           </View>
         </View>
       </Modal>
+    </View>
+  );
+}
+
+function LeaguePicksSection({
+  picks,
+}: {
+  picks: { userName: string; castawayName: string; isAlive: boolean }[];
+}) {
+  return (
+    <View style={styles.leaguePicksSection}>
+      <Text style={styles.leaguePicksTitle}>League Picks</Text>
+      <Text style={styles.leaguePicksSubtext}>
+        Everyone{"'"}s pick for this episode
+      </Text>
+      {picks.map((p, i) => (
+        <View key={i} style={styles.leaguePickRow}>
+          <Ionicons
+            name="person-circle-outline"
+            size={24}
+            color="#666"
+            style={{ marginRight: 10 }}
+          />
+          <Text style={styles.leaguePickName} numberOfLines={1}>
+            {p.userName}
+          </Text>
+          <View style={styles.leaguePickRight}>
+            <Text style={styles.leaguePickCastaway} numberOfLines={1}>
+              {p.castawayName}
+            </Text>
+          </View>
+        </View>
+      ))}
     </View>
   );
 }
@@ -687,5 +748,46 @@ const styles = StyleSheet.create({
   },
   winnerNameSelected: {
     color: '#ffa502',
+  },
+  leaguePicksSection: {
+    marginTop: 16,
+    backgroundColor: '#1a1a2e',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#2a2a4e',
+  },
+  leaguePicksTitle: {
+    color: '#e94560',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  leaguePicksSubtext: {
+    color: '#a0a0a0',
+    fontSize: 12,
+    marginBottom: 12,
+  },
+  leaguePickRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a4e',
+  },
+  leaguePickName: {
+    color: '#ffffff',
+    fontSize: 14,
+    flex: 1,
+  },
+  leaguePickRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  leaguePickCastaway: {
+    color: '#a0a0a0',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

@@ -75,6 +75,17 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="game/user-picks"
+          options={{
+            title: 'Player Picks',
+            headerLeft: () => (
+              <Pressable onPress={() => router.back()} hitSlop={16}>
+                <Ionicons name="chevron-back" size={28} color="#e94560" />
+              </Pressable>
+            ),
+          }}
+        />
+        <Stack.Screen
           name="castaway/[id]"
           options={{ title: 'Castaway', presentation: 'modal' }}
         />

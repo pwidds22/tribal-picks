@@ -85,6 +85,19 @@ export default function LeagueDetailScreen() {
     });
   };
 
+  const handleViewUserPicks = (userId: string, displayName: string) => {
+    if (!league) return;
+    router.push({
+      pathname: '/game/user-picks',
+      params: {
+        leagueId: league.id,
+        userId,
+        userName: displayName,
+        gameType: league.game_type,
+      },
+    } as never);
+  };
+
   const handlePlay = () => {
     if (!league) return;
     if (league.game_type === 'bracket') {
@@ -178,12 +191,14 @@ export default function LeagueDetailScreen() {
           gameType="bracket"
           entries={bracketStandings}
           currentUserId={user?.id ?? null}
+          onPressUser={handleViewUserPicks}
         />
       ) : league.game_type === 'survivor_pool' ? (
         <Leaderboard
           gameType="survivor_pool"
           entries={poolStandings}
           currentUserId={user?.id ?? null}
+          onPressUser={handleViewUserPicks}
         />
       ) : null}
 

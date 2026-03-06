@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   SectionList,
+  ScrollView,
   Pressable,
   ActivityIndicator,
   Alert,
@@ -24,6 +25,7 @@ import {
   getEpisodeByNumber,
   saveBracketPicks,
   getBracketPicks,
+  getLeagueMembers,
 } from '../../services/supabase/queries';
 import { isBracketLocked, isEpisodeLocked } from '../../core/locks';
 import type { Castaway } from '../../core/types';
@@ -391,6 +393,13 @@ export default function BracketScreen() {
 
   const [positionOffset, setPositionOffset] = useState(0);
 
+  // Member viewing state (when locked)
+  const [leagueMembers, setLeagueMembers] = useState<
+    { user_id: string; username: string; display_name: string | null }[]
+  >([]);
+  const [viewingUserId, setViewingUserId] = useState<string | null>(null);
+  const [viewingPickedIds, setViewingPickedIds] = useState<number[]>([]);
+
   // Edit/swap state
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [swapSourceIndex, setSwapSourceIndex] = useState<number | null>(null);
@@ -412,12 +421,14 @@ export default function BracketScreen() {
       }
 
       // Determine lock time based on start episode
+      let locked = false;
       if (startEp === 1) {
-        setIsLocked(isBracketLocked(season.premiere_date));
+        locked = isBracketLocked(season.premiere_date);
       } else {
         const episode = await getEpisodeByNumber(season.id, startEp);
-        setIsLocked(episode ? isEpisodeLocked(episode.air_date) : true);
+        locked = episode ? isEpisodeLocked(episode.air_date) : true;
       }
+      setIsLocked(locked);
 
       // Load castaways — filter to alive at start episode if mid-season
       let bracketCastaways: Castaway[];
@@ -440,6 +451,12 @@ export default function BracketScreen() {
           setSavedPickedIds(savedOrder);
         }
       }
+
+      // Fetch league members when locked (for viewing others' brackets)
+      if (locked && leagueId) {
+        const members = await getLeagueMembers(leagueId);
+        setLeagueMembers(members);
+      }
     } catch {
       Alert.alert('Error', 'Failed to load bracket data. Please try again.');
     } finally {
@@ -452,6 +469,12 @@ export default function BracketScreen() {
     for (const c of castaways) map.set(c.id, c);
     return map;
   }, [castaways]);
+
+  // When viewing another member's bracket, use their picks for display
+  const displayPickedIds = viewingUserId ? viewingPickedIds : pickedIds;
+  const viewingMember = viewingUserId
+    ? leagueMembers.find((m) => m.user_id === viewingUserId)
+    : null;
 
   const pickedSet = useMemo(() => new Set(pickedIds), [pickedIds]);
 
@@ -580,6 +603,28 @@ export default function BracketScreen() {
     }
   };
 
+  const handleViewMember = useCallback(
+    async (userId: string | null) => {
+      if (!userId || userId === user?.id) {
+        setViewingUserId(null);
+        setViewingPickedIds([]);
+        return;
+      }
+      setViewingUserId(userId);
+      try {
+        const picks = await getBracketPicks(leagueId!, userId);
+        const order = picks
+          .sort((a, b) => a.predicted_position - b.predicted_position)
+          .map((p) => p.castaway_id);
+        setViewingPickedIds(order);
+      } catch {
+        setViewingUserId(null);
+        setViewingPickedIds([]);
+      }
+    },
+    [leagueId, user?.id],
+  );
+
   const getPositionLabel = (index: number): string => {
     const globalPos = index + 1 + positionOffset;
     const totalGlobal = totalCastaways + positionOffset;
@@ -597,7 +642,7 @@ export default function BracketScreen() {
     | { type: 'available'; castaway: Castaway };
 
   const sections = useMemo(() => {
-    const bracketItems: SectionItem[] = pickedIds.map((id, index) => ({
+    const bracketItems: SectionItem[] = displayPickedIds.map((id, index) => ({
       type: 'picked' as const,
       castawayId: id,
       index,
@@ -607,9 +652,13 @@ export default function BracketScreen() {
       bracketItems.push({ type: 'next_slot' as const });
     }
 
+    const bracketTitle = viewingMember
+      ? `${(viewingMember.display_name ?? viewingMember.username).toUpperCase()}'S BRACKET (${displayPickedIds.length}/${totalCastaways})`
+      : `YOUR BRACKET (${displayPickedIds.length}/${totalCastaways})`;
+
     const result: { title: string; data: SectionItem[] }[] = [
       {
-        title: `YOUR BRACKET (${pickedIds.length}/${totalCastaways})`,
+        title: bracketTitle,
         data:
           bracketItems.length > 0
             ? bracketItems
@@ -630,7 +679,7 @@ export default function BracketScreen() {
     }
 
     return result;
-  }, [pickedIds, available, allPicked, isLocked, totalCastaways]);
+  }, [displayPickedIds, pickedIds, available, allPicked, isLocked, totalCastaways, viewingMember]);
 
   // Editing castaway for the sheet
   const editingCastaway =
@@ -663,13 +712,15 @@ export default function BracketScreen() {
       )}
 
       {/* Progress bar */}
-      <BracketProgress filled={pickedIds.length} total={totalCastaways} />
+      <BracketProgress filled={displayPickedIds.length} total={totalCastaways} />
 
       {/* Instructions */}
       <View style={styles.instructions}>
         <Text style={styles.instructionText}>
           {isLocked
-            ? 'Brackets are locked. Good luck this season!'
+            ? viewingMember
+              ? `Viewing ${viewingMember.display_name ?? viewingMember.username}'s bracket`
+              : 'Brackets are locked. Good luck this season!'
             : pickedIds.length === 0
               ? "Tap castaways in the order you think they'll be eliminated"
               : allPicked
@@ -682,6 +733,57 @@ export default function BracketScreen() {
           </Pressable>
         )}
       </View>
+
+      {/* Member selector (only when locked with multiple members) */}
+      {isLocked && leagueMembers.length > 1 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.memberSelector}
+        >
+          <Pressable
+            style={[
+              styles.memberChip,
+              !viewingUserId && styles.memberChipActive,
+            ]}
+            onPress={() => {
+              setViewingUserId(null);
+              setViewingPickedIds([]);
+            }}
+          >
+            <Text
+              style={[
+                styles.memberChipText,
+                !viewingUserId && styles.memberChipTextActive,
+              ]}
+            >
+              You
+            </Text>
+          </Pressable>
+          {leagueMembers
+            .filter((m) => m.user_id !== user?.id)
+            .map((m) => (
+              <Pressable
+                key={m.user_id}
+                style={[
+                  styles.memberChip,
+                  viewingUserId === m.user_id && styles.memberChipActive,
+                ]}
+                onPress={() => handleViewMember(m.user_id)}
+              >
+                <Text
+                  style={[
+                    styles.memberChipText,
+                    viewingUserId === m.user_id && styles.memberChipTextActive,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {m.display_name ?? m.username}
+                </Text>
+              </Pressable>
+            ))}
+        </ScrollView>
+      )}
 
       <SectionList
         sections={sections}
@@ -1077,6 +1179,36 @@ const styles = StyleSheet.create({
     color: '#a0a0a0',
     fontSize: 11,
     marginTop: 1,
+  },
+
+  // Member selector
+  memberSelector: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+    backgroundColor: '#1a1a2e',
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a4e',
+  },
+  memberChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#16213e',
+    borderWidth: 1,
+    borderColor: '#2a2a4e',
+  },
+  memberChipActive: {
+    backgroundColor: '#e94560',
+    borderColor: '#e94560',
+  },
+  memberChipText: {
+    color: '#a0a0a0',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  memberChipTextActive: {
+    color: '#ffffff',
   },
 
   // Save button

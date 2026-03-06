@@ -10,6 +10,7 @@ import { useSeasonStore } from '../../stores/useSeasonStore';
 import { getMillisUntilLock } from '../../core/locks';
 import { getBracketPicks, getSurvivorPoolPicks } from '../../services/supabase/queries';
 import { GAME_TYPE_META } from '../../core/gameTypes';
+import AnnouncementBanner from '../../components/AnnouncementBanner';
 import type { League } from '../../core/types';
 
 // ---------- Sub-Components ----------
@@ -411,6 +412,9 @@ export default function HomeScreen() {
             </Text>
           )}
         </View>
+
+        {/* Announcements */}
+        <AnnouncementBanner />
 
         {/* Countdown / Live Badge */}
         <CountdownHero premiereDate={season?.premiere_date ?? null} />

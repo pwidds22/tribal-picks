@@ -2,6 +2,14 @@
   "cli": {
     "version": ">= 16.0.0"
   },
+  "submit": {
+    "production": {
+      "ios": {
+        "ascAppId": "6759391126",
+        "appleId": "REMOVED"
+      }
+    }
+  },
   "build": {
     "development": {
       "developmentClient": true,

@@ -346,6 +346,121 @@ export async function getSurvivorPoolStatus(
 }
 
 // ============================================
+// League-wide Picks (for visibility after lock)
+// ============================================
+
+/** All users' bracket picks in a league, with castaway names. */
+export async function getAllBracketPicks(
+  leagueId: string
+): Promise<
+  {
+    user_id: string;
+    castaway_id: number;
+    castaway_name: string;
+    predicted_position: number;
+    points: number;
+  }[]
+> {
+  const { data, error } = await supabase
+    .from('bracket_picks')
+    .select('user_id, castaway_id, predicted_position, points, castaways(name)')
+    .eq('league_id', leagueId)
+    .order('predicted_position');
+
+  if (error) throw error;
+  return (data ?? []).map((d) => {
+    const row = d as unknown as {
+      user_id: string;
+      castaway_id: number;
+      predicted_position: number;
+      points: number;
+      castaways: { name: string } | null;
+    };
+    return {
+      user_id: row.user_id,
+      castaway_id: row.castaway_id,
+      castaway_name: row.castaways?.name ?? 'Unknown',
+      predicted_position: row.predicted_position,
+      points: row.points,
+    };
+  });
+}
+
+/** All users' pool picks for a specific episode, with castaway names. */
+export async function getAllPoolPicksForEpisode(
+  leagueId: string,
+  episodeId: number
+): Promise<
+  {
+    user_id: string;
+    picked_castaway_id: number;
+    castaway_name: string;
+    is_alive: boolean;
+  }[]
+> {
+  const { data, error } = await supabase
+    .from('survivor_pool_picks')
+    .select('user_id, picked_castaway_id, is_alive, castaways!survivor_pool_picks_picked_castaway_id_fkey(name)')
+    .eq('league_id', leagueId)
+    .eq('episode_id', episodeId);
+
+  if (error) throw error;
+  return (data ?? []).map((d) => {
+    const row = d as unknown as {
+      user_id: string;
+      picked_castaway_id: number;
+      is_alive: boolean;
+      castaways: { name: string } | null;
+    };
+    return {
+      user_id: row.user_id,
+      picked_castaway_id: row.picked_castaway_id,
+      castaway_name: row.castaways?.name ?? 'Unknown',
+      is_alive: row.is_alive,
+    };
+  });
+}
+
+/** One user's pool picks across all episodes (for historical view). */
+export async function getUserPoolPickHistory(
+  leagueId: string,
+  userId: string
+): Promise<
+  {
+    episode_id: number;
+    episode_number: number;
+    picked_castaway_id: number;
+    castaway_name: string;
+    is_alive: boolean;
+  }[]
+> {
+  const { data, error } = await supabase
+    .from('survivor_pool_picks')
+    .select('episode_id, picked_castaway_id, is_alive, castaways!survivor_pool_picks_picked_castaway_id_fkey(name), episodes!survivor_pool_picks_episode_id_fkey(number)')
+    .eq('league_id', leagueId)
+    .eq('user_id', userId)
+    .order('episode_id');
+
+  if (error) throw error;
+  return (data ?? []).map((d) => {
+    const row = d as unknown as {
+      episode_id: number;
+      picked_castaway_id: number;
+      is_alive: boolean;
+      castaways: { name: string } | null;
+      episodes: { number: number } | null;
+    };
+    return {
+      episode_id: row.episode_id,
+      episode_number: row.episodes?.number ?? 0,
+      picked_castaway_id: row.picked_castaway_id,
+      castaway_name: row.castaways?.name ?? 'Unknown',
+      is_alive: row.is_alive,
+    };
+  });
+}
+
+// ============================================
 // Standings / Leaderboard
 // ============================================
 
@@ -387,6 +502,30 @@ export async function deleteLeague(leagueId: string): Promise<void> {
     .delete()
     .eq('id', leagueId);
   if (error) throw new Error(error.message);
+}
+
+// ============================================
+// Announcements
+// ============================================
+
+export type Announcement = {
+  id: string;
+  message: string;
+  link_text: string | null;
+  link_url: string | null;
+};
+
+export async function getActiveAnnouncement(): Promise<Announcement | null> {
+  const { data, error } = await supabase
+    .from('announcements')
+    .select('id, message, link_text, link_url')
+    .eq('active', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
 }
 
 // ============================================

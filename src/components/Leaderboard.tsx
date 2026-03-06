@@ -1,4 +1,5 @@
-import { View, Text, FlatList, StyleSheet } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import type {
   LeaderboardEntry,
   SurvivorPoolStandingEntry,
@@ -9,15 +10,17 @@ type Props =
       gameType: 'bracket';
       entries: LeaderboardEntry[];
       currentUserId: string | null;
+      onPressUser?: (userId: string, displayName: string) => void;
     }
   | {
       gameType: 'survivor_pool';
       entries: SurvivorPoolStandingEntry[];
       currentUserId: string | null;
+      onPressUser?: (userId: string, displayName: string) => void;
     };
 
 export default function Leaderboard(props: Props) {
-  const { gameType, currentUserId } = props;
+  const { gameType, currentUserId, onPressUser } = props;
 
   if (gameType === 'bracket') {
     return (
@@ -29,6 +32,7 @@ export default function Leaderboard(props: Props) {
           <BracketRow
             entry={item}
             isCurrentUser={item.user_id === currentUserId}
+            onPress={onPressUser}
           />
         )}
         ListEmptyComponent={<EmptyState />}
@@ -45,6 +49,7 @@ export default function Leaderboard(props: Props) {
         <PoolRow
           entry={item}
           isCurrentUser={item.user_id === currentUserId}
+          onPress={onPressUser}
         />
       )}
       ListEmptyComponent={<EmptyState />}
@@ -65,12 +70,15 @@ function BracketHeader() {
 function BracketRow({
   entry,
   isCurrentUser,
+  onPress,
 }: {
   entry: LeaderboardEntry;
   isCurrentUser: boolean;
+  onPress?: (userId: string, displayName: string) => void;
 }) {
-  return (
-    <View style={[styles.row, isCurrentUser && styles.currentUserRow]}>
+  const displayName = entry.display_name ?? entry.username;
+  const content = (
+    <>
       <Text style={[styles.rank, isCurrentUser && styles.currentUserText]}>
         {entry.rank}
       </Text>
@@ -79,13 +87,37 @@ function BracketRow({
           style={[styles.name, isCurrentUser && styles.currentUserText]}
           numberOfLines={1}
         >
-          {entry.display_name ?? entry.username}
+          {displayName}
         </Text>
         {isCurrentUser && <Text style={styles.youBadge}>You</Text>}
+        {onPress && (
+          <Ionicons name="chevron-forward" size={14} color="#555" />
+        )}
       </View>
       <Text style={[styles.score, isCurrentUser && styles.currentUserText]}>
         {entry.total_points}
       </Text>
+    </>
+  );
+
+  if (onPress) {
+    return (
+      <Pressable
+        style={({ pressed }) => [
+          styles.row,
+          isCurrentUser && styles.currentUserRow,
+          pressed && styles.rowPressed,
+        ]}
+        onPress={() => onPress(entry.user_id, displayName)}
+      >
+        {content}
+      </Pressable>
+    );
+  }
+
+  return (
+    <View style={[styles.row, isCurrentUser && styles.currentUserRow]}>
+      {content}
     </View>
   );
 }
@@ -103,23 +135,20 @@ function PoolHeader() {
 function PoolRow({
   entry,
   isCurrentUser,
+  onPress,
 }: {
   entry: SurvivorPoolStandingEntry;
   isCurrentUser: boolean;
+  onPress?: (userId: string, displayName: string) => void;
 }) {
   const statusText = entry.is_alive
     ? 'ALIVE'
     : `Out Ep. ${entry.eliminated_in_episode ?? '?'}`;
   const statusColor = entry.is_alive ? '#2ed573' : '#ff4757';
+  const displayName = entry.display_name ?? entry.username;
 
-  return (
-    <View
-      style={[
-        styles.row,
-        isCurrentUser && styles.currentUserRow,
-        !entry.is_alive && styles.eliminatedRow,
-      ]}
-    >
+  const content = (
+    <>
       <Text style={[styles.rank, isCurrentUser && styles.currentUserText]}>
         {entry.rank}
       </Text>
@@ -132,13 +161,44 @@ function PoolRow({
           ]}
           numberOfLines={1}
         >
-          {entry.display_name ?? entry.username}
+          {displayName}
         </Text>
         {isCurrentUser && <Text style={styles.youBadge}>You</Text>}
+        {onPress && (
+          <Ionicons name="chevron-forward" size={14} color="#555" />
+        )}
       </View>
       <Text style={[styles.statusText, { color: statusColor }]}>
         {statusText}
       </Text>
+    </>
+  );
+
+  if (onPress) {
+    return (
+      <Pressable
+        style={({ pressed }) => [
+          styles.row,
+          isCurrentUser && styles.currentUserRow,
+          !entry.is_alive && styles.eliminatedRow,
+          pressed && styles.rowPressed,
+        ]}
+        onPress={() => onPress(entry.user_id, displayName)}
+      >
+        {content}
+      </Pressable>
+    );
+  }
+
+  return (
+    <View
+      style={[
+        styles.row,
+        isCurrentUser && styles.currentUserRow,
+        !entry.is_alive && styles.eliminatedRow,
+      ]}
+    >
+      {content}
     </View>
   );
 }
@@ -171,6 +231,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#1a1a2e',
+  },
+  rowPressed: {
+    backgroundColor: '#252545',
   },
   currentUserRow: {
     backgroundColor: '#1a1a2e',
