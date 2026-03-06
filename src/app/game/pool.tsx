@@ -26,6 +26,7 @@ import {
   getSurvivorPoolStatus,
   getAllPoolPicksForEpisode,
   getLeagueMembers,
+  getPickSubmissionStatus,
   getEpisodes,
 } from '../../services/supabase/queries';
 import { getUsedCastaways } from '../../core/scoring';
@@ -55,6 +56,10 @@ export default function SurvivorPoolScreen() {
   const [showRules, setShowRules] = useState(false);
   const [leaguePicks, setLeaguePicks] = useState<
     { userName: string; castawayName: string; isAlive: boolean }[]
+  >([]);
+  const [submittedUserIds, setSubmittedUserIds] = useState<string[]>([]);
+  const [leagueMembers, setLeagueMembers] = useState<
+    { user_id: string; name: string }[]
   >([]);
 
   useEffect(() => {
@@ -101,22 +106,45 @@ export default function SurvivorPoolScreen() {
         setIsFinale(finale);
       }
 
-      // Fetch league-wide picks when episode is locked
-      if (leagueId && episode && isEpisodeLocked(episode.air_date)) {
-        const [allPicks, members] = await Promise.all([
-          getAllPoolPicksForEpisode(leagueId, episode.id),
-          getLeagueMembers(leagueId),
-        ]);
-        const memberMap = new Map(
-          members.map((m) => [m.user_id, m.display_name ?? m.username])
-        );
-        setLeaguePicks(
-          allPicks.map((p) => ({
-            userName: memberMap.get(p.user_id) ?? 'Unknown',
-            castawayName: p.castaway_name,
-            isAlive: p.is_alive,
-          }))
-        );
+      // Fetch league pick data for the current episode
+      if (leagueId && episode) {
+        const locked = isEpisodeLocked(episode.air_date);
+        if (locked) {
+          // After lock: show everyone's actual picks
+          const [allPicks, members] = await Promise.all([
+            getAllPoolPicksForEpisode(leagueId, episode.id),
+            getLeagueMembers(leagueId),
+          ]);
+          const memberMap = new Map(
+            members.map((m) => [m.user_id, m.display_name ?? m.username])
+          );
+          setLeaguePicks(
+            allPicks.map((p) => ({
+              userName: memberMap.get(p.user_id) ?? 'Unknown',
+              castawayName: p.castaway_name,
+              isAlive: p.is_alive,
+            }))
+          );
+          setLeagueMembers(
+            members.map((m) => ({
+              user_id: m.user_id,
+              name: m.display_name ?? m.username,
+            }))
+          );
+        } else {
+          // Before lock: show who submitted (no castaway revealed)
+          const [submitted, members] = await Promise.all([
+            getPickSubmissionStatus(leagueId, episode.id),
+            getLeagueMembers(leagueId),
+          ]);
+          setSubmittedUserIds(submitted);
+          setLeagueMembers(
+            members.map((m) => ({
+              user_id: m.user_id,
+              name: m.display_name ?? m.username,
+            }))
+          );
+        }
       }
 
       if (leagueId && user) {
@@ -272,8 +300,14 @@ export default function SurvivorPoolScreen() {
           columnWrapperStyle={styles.columnWrapper}
           contentContainerStyle={styles.listContent}
           ListFooterComponent={
-            isLocked && leaguePicks.length > 0 ? (
-              <LeaguePicksSection picks={leaguePicks} />
+            leagueMembers.length > 0 ? (
+              <MemberPicksSummary
+                members={leagueMembers}
+                submittedUserIds={submittedUserIds}
+                leaguePicks={leaguePicks}
+                isLocked={isLocked}
+                currentUserId={user?.id ?? ''}
+              />
             ) : null
           }
           renderItem={({ item }) => {
@@ -422,35 +456,103 @@ export default function SurvivorPoolScreen() {
   );
 }
 
-function LeaguePicksSection({
-  picks,
+function MemberPicksSummary({
+  members,
+  submittedUserIds,
+  leaguePicks,
+  isLocked,
+  currentUserId,
 }: {
-  picks: { userName: string; castawayName: string; isAlive: boolean }[];
+  members: { user_id: string; name: string }[];
+  submittedUserIds: string[];
+  leaguePicks: { userName: string; castawayName: string; isAlive: boolean }[];
+  isLocked: boolean;
+  currentUserId: string;
 }) {
+  if (members.length === 0) return null;
+
+  const submittedCount = isLocked ? leaguePicks.length : submittedUserIds.length;
+
   return (
     <View style={styles.leaguePicksSection}>
-      <Text style={styles.leaguePicksTitle}>League Picks</Text>
-      <Text style={styles.leaguePicksSubtext}>
-        Everyone{"'"}s pick for this episode
+      <Text style={styles.leaguePicksTitle}>
+        {isLocked ? 'League Picks' : 'Pick Status'}
       </Text>
-      {picks.map((p, i) => (
-        <View key={i} style={styles.leaguePickRow}>
-          <Ionicons
-            name="person-circle-outline"
-            size={24}
-            color="#666"
-            style={{ marginRight: 10 }}
-          />
-          <Text style={styles.leaguePickName} numberOfLines={1}>
-            {p.userName}
-          </Text>
-          <View style={styles.leaguePickRight}>
-            <Text style={styles.leaguePickCastaway} numberOfLines={1}>
-              {p.castawayName}
-            </Text>
-          </View>
-        </View>
-      ))}
+      <Text style={styles.leaguePicksSubtext}>
+        {isLocked
+          ? "Everyone\u2019s pick for this episode"
+          : `${submittedCount} of ${members.length} picks submitted`}
+      </Text>
+      {members.map((m) => {
+        const isCurrentUser = m.user_id === currentUserId;
+
+        if (isLocked) {
+          // After lock: show actual castaway pick
+          const pick = leaguePicks.find((p) => p.userName === m.name);
+          return (
+            <View
+              key={m.user_id}
+              style={[styles.leaguePickRow, isCurrentUser && styles.currentUserRow]}
+            >
+              <Ionicons
+                name="person-circle-outline"
+                size={24}
+                color={isCurrentUser ? '#e94560' : '#666'}
+                style={{ marginRight: 10 }}
+              />
+              <Text
+                style={[styles.leaguePickName, isCurrentUser && styles.currentUserName]}
+                numberOfLines={1}
+              >
+                {m.name}{isCurrentUser ? ' (You)' : ''}
+              </Text>
+              <View style={styles.leaguePickRight}>
+                <Text
+                  style={[
+                    styles.leaguePickCastaway,
+                    !pick && styles.noPick,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {pick ? pick.castawayName : 'No pick'}
+                </Text>
+              </View>
+            </View>
+          );
+        } else {
+          // Before lock: show submitted/pending status
+          const submitted = submittedUserIds.includes(m.user_id);
+          return (
+            <View
+              key={m.user_id}
+              style={[styles.leaguePickRow, isCurrentUser && styles.currentUserRow]}
+            >
+              <Ionicons
+                name={submitted ? 'checkmark-circle' : 'ellipse-outline'}
+                size={24}
+                color={submitted ? '#2ed573' : '#444'}
+                style={{ marginRight: 10 }}
+              />
+              <Text
+                style={[styles.leaguePickName, isCurrentUser && styles.currentUserName]}
+                numberOfLines={1}
+              >
+                {m.name}{isCurrentUser ? ' (You)' : ''}
+              </Text>
+              <View style={styles.leaguePickRight}>
+                <Text
+                  style={[
+                    styles.pickStatusText,
+                    { color: submitted ? '#2ed573' : '#666' },
+                  ]}
+                >
+                  {submitted ? 'Submitted' : 'Pending'}
+                </Text>
+              </View>
+            </View>
+          );
+        }
+      })}
     </View>
   );
 }
@@ -789,5 +891,19 @@ const styles = StyleSheet.create({
     color: '#a0a0a0',
     fontSize: 13,
     fontWeight: '600',
+  },
+  noPick: {
+    color: '#666',
+    fontStyle: 'italic',
+  },
+  pickStatusText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  currentUserRow: {
+    backgroundColor: 'rgba(233, 69, 96, 0.08)',
+  },
+  currentUserName: {
+    color: '#e94560',
   },
 });

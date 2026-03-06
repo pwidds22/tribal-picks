@@ -346,6 +346,25 @@ export async function getSurvivorPoolStatus(
 }
 
 // ============================================
+// Pick Submission Status (safe to show before lock)
+// ============================================
+
+/** Returns which users have submitted a pick for an episode (no castaway info). */
+export async function getPickSubmissionStatus(
+  leagueId: string,
+  episodeId: number
+): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('survivor_pool_picks')
+    .select('user_id')
+    .eq('league_id', leagueId)
+    .eq('episode_id', episodeId);
+
+  if (error) throw error;
+  return (data ?? []).map((d) => d.user_id);
+}
+
+// ============================================
 // League-wide Picks (for visibility after lock)
 // ============================================
 

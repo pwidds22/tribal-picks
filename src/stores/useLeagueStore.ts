@@ -10,6 +10,7 @@ type LeagueState = {
   fetchLeagues: (userId: string) => Promise<void>;
   deleteLeague: (leagueId: string) => Promise<void>;
   invalidate: () => void;
+  reset: () => void;
 };
 
 const STALE_MS = 60 * 1000; // 1 minute
@@ -41,4 +42,6 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
   },
 
   invalidate: () => set({ lastFetched: 0 }),
+
+  reset: () => set({ leagues: [], isLoading: false, error: null, lastFetched: 0 }),
 }));

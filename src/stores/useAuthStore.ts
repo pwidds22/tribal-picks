@@ -12,6 +12,7 @@ import {
   onAuthStateChange,
   updateDisplayName as authUpdateDisplayName,
 } from '../services/supabase/auth';
+import { useLeagueStore } from './useLeagueStore';
 
 type AuthState = {
   user: { id: string; email: string } | null;
@@ -105,6 +106,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       await authSignOut();
       set({ user: null, profile: null });
+      useLeagueStore.getState().reset();
     } catch (err) {
       set({ error: err instanceof Error ? err.message : 'An error occurred' });
     }
@@ -114,6 +116,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       await authDeleteAccount();
       set({ user: null, profile: null });
+      useLeagueStore.getState().reset();
     } catch (err) {
       set({ error: err instanceof Error ? err.message : 'An error occurred' });
       throw err;
@@ -131,6 +134,12 @@ export const useAuthStore = create<AuthState>((set) => ({
     // Helper to restore user + profile from a session
     const restoreFromSession = async (session: { user: { id: string; email?: string } } | null) => {
       if (session?.user) {
+        // If the user changed (e.g., different account), reset league data
+        const prevUser = useAuthStore.getState().user;
+        if (prevUser && prevUser.id !== session.user.id) {
+          useLeagueStore.getState().reset();
+        }
+
         const userObj = {
           id: session.user.id,
           email: session.user.email ?? '',
@@ -152,7 +161,9 @@ export const useAuthStore = create<AuthState>((set) => ({
         }
         set({ user: userObj, profile, isLoading: false });
       } else {
+        // Session is null — user signed out or session expired
         set({ user: null, profile: null, isLoading: false });
+        useLeagueStore.getState().reset();
       }
     };
 

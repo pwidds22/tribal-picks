@@ -8,7 +8,9 @@ import {
   getUserPoolPickHistory,
   getCastaways,
   getLeague,
+  getEpisodes,
 } from '../../services/supabase/queries';
+import { isEpisodeLocked } from '../../core/locks';
 import type { BracketPick, Castaway, League } from '../../core/types';
 
 type PoolPickRow = {
@@ -55,8 +57,20 @@ export default function UserPicksScreen() {
           }))
         );
       } else {
-        const history = await getUserPoolPickHistory(leagueId, userId);
-        setPoolHistory(history);
+        const [history, episodes] = await Promise.all([
+          getUserPoolPickHistory(leagueId, userId),
+          leagueData ? getEpisodes(leagueData.season_id) : Promise.resolve([]),
+        ]);
+        // Build a map of episode_number → air_date for lock checking
+        const episodeAirDateMap = new Map(
+          episodes.map((ep) => [ep.number, ep.air_date])
+        );
+        // Only show picks for episodes that have already aired (locked)
+        const lockedPicks = history.filter((pick) => {
+          const airDate = episodeAirDateMap.get(pick.episode_number);
+          return airDate ? isEpisodeLocked(airDate) : false;
+        });
+        setPoolHistory(lockedPicks);
       }
     } catch {
       // Fail silently — empty state will show
