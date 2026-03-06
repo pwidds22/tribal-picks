@@ -51,16 +51,19 @@ iOS app (iPhone + iPad) for fantasy Survivor (CBS). Season 50 premieres Feb 25, 
 See `src/core/types.ts` for exact point values per game type.
 
 ## EAS Build Rules (STRICT — each build costs $2)
-- **ALWAYS bump `buildNumber` in `app.config.ts` BEFORE running `eas build`** if any code has changed since the last build
-- **NEVER run `eas build` without confirming the build number is incremented** from the last submitted build
-- **NEVER run `eas submit` without first verifying the build number is new** — Apple rejects duplicate build numbers
+- **ALWAYS bump BOTH `version` AND `buildNumber` in `app.config.ts` BEFORE running `eas build`** when submitting new changes to Apple
+- **Apple rejects same `version` string** — once a version (e.g. `1.0.1`) has been submitted to App Store Connect, you CANNOT submit another build under that version. You MUST increment `version` (e.g. `1.0.1` → `1.0.2`)
+- **NEVER run `eas build` without confirming BOTH version and build number are incremented** from the last submitted build
+- **NEVER run `eas submit` without first verifying the version is new** — Apple rejects duplicate versions
 - **Batch all changes into ONE build** — do not build, discover a problem, then build again without collecting all fixes first
+- **NEVER forget to commit all code changes BEFORE running `eas build`** — EAS uploads local files but uncommitted changes won't be in git history
 
 ## Anti-Patterns
 - **DON'T** hardcode castaway data — always fetch from Supabase
 - **DON'T** put scoring logic in UI components — keep it in `src/core/scoring.ts`
 - **DON'T** allow picks after lock time — enforce at both UI and DB (RLS) level
 - **DON'T** import `services/` from `core/` — keep core pure
+- **DON'T** bump only `buildNumber` without also bumping `version` — Apple rejects resubmissions of the same version string (cost us a wasted $2 build)
 
 ## Survivor Show Edge Cases
 - **Double elimination**: Two tribals in one episode → both eliminations scored for that episode
