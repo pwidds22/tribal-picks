@@ -50,6 +50,12 @@ iOS app (iPhone + iPad) for fantasy Survivor (CBS). Season 50 premieres Feb 25, 
 ## Scoring Reference
 See `src/core/types.ts` for exact point values per game type.
 
+## EAS Build Rules (STRICT — each build costs $2)
+- **ALWAYS bump `buildNumber` in `app.config.ts` BEFORE running `eas build`** if any code has changed since the last build
+- **NEVER run `eas build` without confirming the build number is incremented** from the last submitted build
+- **NEVER run `eas submit` without first verifying the build number is new** — Apple rejects duplicate build numbers
+- **Batch all changes into ONE build** — do not build, discover a problem, then build again without collecting all fixes first
+
 ## Anti-Patterns
 - **DON'T** hardcode castaway data — always fetch from Supabase
 - **DON'T** put scoring logic in UI components — keep it in `src/core/scoring.ts`
