@@ -299,7 +299,7 @@ export default function SurvivorPoolScreen() {
           numColumns={2}
           columnWrapperStyle={styles.columnWrapper}
           contentContainerStyle={styles.listContent}
-          ListFooterComponent={
+          ListHeaderComponent={
             leagueMembers.length > 0 ? (
               <MemberPicksSummary
                 members={leagueMembers}

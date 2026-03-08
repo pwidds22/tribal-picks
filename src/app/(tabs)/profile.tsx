@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Linking, Alert, ScrollView, TextInput, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useLeagueStore } from '../../stores/useLeagueStore';
@@ -13,14 +14,33 @@ export default function ProfileScreen() {
   const user = useAuthStore((s) => s.user);
   const profile = useAuthStore((s) => s.profile);
   const authLoading = useAuthStore((s) => s.isLoading);
+  const signingOut = useAuthStore((s) => s.signingOut);
+  const authError = useAuthStore((s) => s.error);
+  const clearError = useAuthStore((s) => s.clearError);
   const signOut = useAuthStore((s) => s.signOut);
   const deleteAccount = useAuthStore((s) => s.deleteAccount);
   const updateDisplayName = useAuthStore((s) => s.updateDisplayName);
   const leagueCount = useLeagueStore((s) => s.leagues.length);
+  const fetchLeagues = useLeagueStore((s) => s.fetchLeagues);
 
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Fetch leagues when Profile tab gains focus (don't rely solely on Home tab)
+  useFocusEffect(
+    useCallback(() => {
+      if (user) fetchLeagues(user.id);
+    }, [user, fetchLeagues]),
+  );
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch {
+      Alert.alert('Sign Out Failed', 'Something went wrong. Please try again.');
+    }
+  };
 
   const handleEditName = () => {
     setNameInput(profile?.display_name ?? '');
@@ -152,8 +172,24 @@ export default function ProfileScreen() {
           </Pressable>
         </View>
 
-        <Pressable style={styles.signOutButton} onPress={signOut}>
-          <Text style={styles.signOutText}>Sign Out</Text>
+        {authError ? (
+          <Pressable style={styles.errorBanner} onPress={clearError}>
+            <Ionicons name="alert-circle" size={16} color="#ff4757" />
+            <Text style={styles.errorText}>{authError}</Text>
+            <Ionicons name="close" size={16} color="#a0a0a0" />
+          </Pressable>
+        ) : null}
+
+        <Pressable
+          style={[styles.signOutButton, signingOut && styles.signOutButtonDisabled]}
+          onPress={handleSignOut}
+          disabled={signingOut}
+        >
+          {signingOut ? (
+            <ActivityIndicator size="small" color="#ff4757" />
+          ) : (
+            <Text style={styles.signOutText}>Sign Out</Text>
+          )}
         </Pressable>
 
         <Pressable style={styles.deleteButton} onPress={handleDeleteAccount}>
@@ -276,16 +312,35 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#a0a0a0',
   },
+  errorBanner: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: 'rgba(255, 71, 87, 0.1)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 71, 87, 0.3)',
+    padding: 12,
+    marginBottom: 12,
+    gap: 8,
+  },
+  errorText: {
+    flex: 1,
+    color: '#ff4757',
+    fontSize: 13,
+  },
   signOutButton: {
     backgroundColor: '#2a2a4e',
     borderRadius: 10,
     paddingVertical: 14,
-    alignItems: 'center',
+    alignItems: 'center' as const,
     marginTop: 8,
+  },
+  signOutButtonDisabled: {
+    opacity: 0.6,
   },
   signOutText: {
     color: '#ff4757',
-    fontWeight: 'bold',
+    fontWeight: 'bold' as const,
     fontSize: 16,
   },
   deleteButton: {

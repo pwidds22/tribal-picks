@@ -8,7 +8,6 @@ import {
   signOut as authSignOut,
   deleteAccount as authDeleteAccount,
   getProfile,
-  getSession,
   onAuthStateChange,
   updateDisplayName as authUpdateDisplayName,
 } from '../services/supabase/auth';
@@ -18,6 +17,7 @@ type AuthState = {
   user: { id: string; email: string } | null;
   profile: Profile | null;
   isLoading: boolean;
+  signingOut: boolean;
   error: string | null;
   signUp: (email: string, password: string, username: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
@@ -34,6 +34,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   profile: null,
   isLoading: true,
+  signingOut: false,
   error: null,
 
   signUp: async (email, password, username) => {
@@ -103,12 +104,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   signOut: async () => {
+    set({ signingOut: true });
     try {
       await authSignOut();
-      set({ user: null, profile: null });
+      set({ user: null, profile: null, signingOut: false });
       useLeagueStore.getState().reset();
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : 'An error occurred' });
+      set({ error: err instanceof Error ? err.message : 'An error occurred', signingOut: false });
+      throw err; // Re-throw so UI can show Alert
     }
   },
 
@@ -131,54 +134,73 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   initialize: () => {
-    // Helper to restore user + profile from a session
-    const restoreFromSession = async (session: { user: { id: string; email?: string } } | null) => {
-      if (session?.user) {
-        // If the user changed (e.g., different account), reset league data
-        const prevUser = useAuthStore.getState().user;
-        if (prevUser && prevUser.id !== session.user.id) {
-          useLeagueStore.getState().reset();
-        }
+    // Staleness guard: each auth event increments this counter.
+    // After async work (profile fetch), we check if our ID is still
+    // current — if not, a newer event has superseded us and we skip
+    // overwriting profile (but we ALWAYS clear isLoading).
+    let latestRestoreId = 0;
 
-        const userObj = {
-          id: session.user.id,
-          email: session.user.email ?? '',
-        };
-        // Try to load profile, retry once after a short delay
-        // (handles race condition where profile is still being created)
-        let profile: Profile | null = null;
+    const {
+      data: { subscription },
+    } = onAuthStateChange(async (event, session) => {
+      const myId = ++latestRestoreId;
+
+      // --- Signed out or no session ---
+      if (event === 'SIGNED_OUT' || !session?.user) {
+        set({ user: null, profile: null, isLoading: false });
+        useLeagueStore.getState().reset();
+        return;
+      }
+
+      // --- SIGNED_IN: sign-in methods already set user+profile, skip redundant work ---
+      if (event === 'SIGNED_IN') {
+        const current = useAuthStore.getState();
+        if (current.user?.id === session.user.id && current.profile) {
+          set({ isLoading: false });
+          return;
+        }
+      }
+
+      // --- TOKEN_REFRESHED or INITIAL_SESSION: restore user + profile ---
+
+      // If user changed (different account), clear stale league data
+      const prevUser = useAuthStore.getState().user;
+      if (prevUser && prevUser.id !== session.user.id) {
+        useLeagueStore.getState().reset();
+      }
+
+      // Set user immediately so UI can render
+      const userObj = {
+        id: session.user.id,
+        email: session.user.email ?? '',
+      };
+      set({ user: userObj });
+
+      // Load profile (retry once for new sign-ups where profile may not exist yet)
+      let profile: Profile | null = null;
+      try {
+        profile = await getProfile(session.user.id);
+      } catch {
+        await new Promise((r) => setTimeout(r, 1500));
         try {
           profile = await getProfile(session.user.id);
         } catch {
-          // Profile may not exist yet — wait and retry
-          await new Promise((r) => setTimeout(r, 1500));
-          try {
-            profile = await getProfile(session.user.id);
-          } catch {
-            // Profile still missing — user/profile will be set by
-            // the sign-in method or next auth state change
-          }
+          // Profile still missing — will be set by next auth event or sign-in method
         }
-        set({ user: userObj, profile, isLoading: false });
-      } else {
-        // Session is null — user signed out or session expired
-        set({ user: null, profile: null, isLoading: false });
-        useLeagueStore.getState().reset();
       }
-    };
 
-    // Eagerly check for an existing session stored in AsyncStorage.
-    // This prevents a race condition where the INITIAL_SESSION event
-    // from onAuthStateChange fires before the listener is registered.
-    getSession().then(restoreFromSession).catch(() => {
-      set({ isLoading: false });
-    });
+      // Guard: if a newer auth event fired while we were fetching profile,
+      // don't overwrite profile with our stale result — but ALWAYS clear isLoading
+      // to prevent the UI from being stuck in a loading state.
+      if (myId !== latestRestoreId) {
+        // Only clear isLoading if it's still true (newer handler will handle the rest)
+        if (useAuthStore.getState().isLoading) {
+          set({ isLoading: false });
+        }
+        return;
+      }
 
-    // Listen for future auth state changes (sign-in, sign-out, token refresh)
-    const {
-      data: { subscription },
-    } = onAuthStateChange(async (_event, session) => {
-      await restoreFromSession(session);
+      set({ profile, isLoading: false });
     });
 
     return () => subscription.unsubscribe();
