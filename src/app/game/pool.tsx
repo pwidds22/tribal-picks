@@ -28,6 +28,7 @@ import {
   getLeagueMembers,
   getPickSubmissionStatus,
   getEpisodes,
+  getLastScoredEpisode,
 } from '../../services/supabase/queries';
 import { getUsedCastaways } from '../../core/scoring';
 import { isEpisodeLocked, getLockDeadlineLabel } from '../../core/locks';
@@ -57,6 +58,10 @@ export default function SurvivorPoolScreen() {
   const [leaguePicks, setLeaguePicks] = useState<
     { userName: string; castawayName: string; isAlive: boolean }[]
   >([]);
+  const [previousEpisodePicks, setPreviousEpisodePicks] = useState<
+    { userName: string; castawayName: string; isAlive: boolean }[]
+  >([]);
+  const [previousEpisodeNumber, setPreviousEpisodeNumber] = useState<number | null>(null);
   const [submittedUserIds, setSubmittedUserIds] = useState<string[]>([]);
   const [leagueMembers, setLeagueMembers] = useState<
     { user_id: string; name: string }[]
@@ -109,15 +114,19 @@ export default function SurvivorPoolScreen() {
       // Fetch league pick data for the current episode
       if (leagueId && episode) {
         const locked = isEpisodeLocked(episode.air_date);
+        const members = await getLeagueMembers(leagueId);
+        const memberMap = new Map(
+          members.map((m) => [m.user_id, m.display_name ?? m.username])
+        );
+        const membersList = members.map((m) => ({
+          user_id: m.user_id,
+          name: m.display_name ?? m.username,
+        }));
+        setLeagueMembers(membersList);
+
         if (locked) {
-          // After lock: show everyone's actual picks
-          const [allPicks, members] = await Promise.all([
-            getAllPoolPicksForEpisode(leagueId, episode.id),
-            getLeagueMembers(leagueId),
-          ]);
-          const memberMap = new Map(
-            members.map((m) => [m.user_id, m.display_name ?? m.username])
-          );
+          // After lock: show everyone's actual picks for this episode
+          const allPicks = await getAllPoolPicksForEpisode(leagueId, episode.id);
           setLeaguePicks(
             allPicks.map((p) => ({
               userName: memberMap.get(p.user_id) ?? 'Unknown',
@@ -125,25 +134,25 @@ export default function SurvivorPoolScreen() {
               isAlive: p.is_alive,
             }))
           );
-          setLeagueMembers(
-            members.map((m) => ({
-              user_id: m.user_id,
-              name: m.display_name ?? m.username,
-            }))
-          );
         } else {
           // Before lock: show who submitted (no castaway revealed)
-          const [submitted, members] = await Promise.all([
-            getPickSubmissionStatus(leagueId, episode.id),
-            getLeagueMembers(leagueId),
-          ]);
+          const submitted = await getPickSubmissionStatus(leagueId, episode.id);
           setSubmittedUserIds(submitted);
-          setLeagueMembers(
-            members.map((m) => ({
-              user_id: m.user_id,
-              name: m.display_name ?? m.username,
-            }))
-          );
+
+          // Also fetch the PREVIOUS scored episode's picks so users can see
+          // what everyone picked last week
+          const lastScored = await getLastScoredEpisode(season.id);
+          if (lastScored) {
+            setPreviousEpisodeNumber(lastScored.number);
+            const prevPicks = await getAllPoolPicksForEpisode(leagueId, lastScored.id);
+            setPreviousEpisodePicks(
+              prevPicks.map((p) => ({
+                userName: memberMap.get(p.user_id) ?? 'Unknown',
+                castawayName: p.castaway_name,
+                isAlive: p.is_alive,
+              }))
+            );
+          }
         }
       }
 
@@ -305,8 +314,11 @@ export default function SurvivorPoolScreen() {
                 members={leagueMembers}
                 submittedUserIds={submittedUserIds}
                 leaguePicks={leaguePicks}
+                previousEpisodePicks={previousEpisodePicks}
+                previousEpisodeNumber={previousEpisodeNumber}
                 isLocked={isLocked}
                 currentUserId={user?.id ?? ''}
+                currentEpisodeNumber={nextEpisode?.number ?? null}
               />
             ) : null
           }
@@ -460,99 +472,123 @@ function MemberPicksSummary({
   members,
   submittedUserIds,
   leaguePicks,
+  previousEpisodePicks,
+  previousEpisodeNumber,
   isLocked,
   currentUserId,
+  currentEpisodeNumber,
 }: {
   members: { user_id: string; name: string }[];
   submittedUserIds: string[];
   leaguePicks: { userName: string; castawayName: string; isAlive: boolean }[];
+  previousEpisodePicks: { userName: string; castawayName: string; isAlive: boolean }[];
+  previousEpisodeNumber: number | null;
   isLocked: boolean;
   currentUserId: string;
+  currentEpisodeNumber: number | null;
 }) {
   if (members.length === 0) return null;
 
   const submittedCount = isLocked ? leaguePicks.length : submittedUserIds.length;
 
-  return (
-    <View style={styles.leaguePicksSection}>
-      <Text style={styles.leaguePicksTitle}>
-        {isLocked ? 'League Picks' : 'Pick Status'}
-      </Text>
-      <Text style={styles.leaguePicksSubtext}>
-        {isLocked
-          ? "Everyone\u2019s pick for this episode"
-          : `${submittedCount} of ${members.length} picks submitted`}
-      </Text>
-      {members.map((m) => {
-        const isCurrentUser = m.user_id === currentUserId;
+  // Which picks to show as revealed: current ep (if locked) or previous ep (if not locked)
+  const revealedPicks = isLocked ? leaguePicks : previousEpisodePicks;
+  const revealedEpLabel = isLocked
+    ? `Episode ${currentEpisodeNumber ?? '?'} Picks`
+    : previousEpisodeNumber != null
+      ? `Episode ${previousEpisodeNumber} Picks`
+      : null;
 
-        if (isLocked) {
-          // After lock: show actual castaway pick
-          const pick = leaguePicks.find((p) => p.userName === m.name);
-          return (
-            <View
-              key={m.user_id}
-              style={[styles.leaguePickRow, isCurrentUser && styles.currentUserRow]}
-            >
-              <Ionicons
-                name="person-circle-outline"
-                size={24}
-                color={isCurrentUser ? '#e94560' : '#666'}
-                style={{ marginRight: 10 }}
-              />
-              <Text
-                style={[styles.leaguePickName, isCurrentUser && styles.currentUserName]}
-                numberOfLines={1}
+  return (
+    <View>
+      {/* Revealed picks section — either current (locked) or previous episode */}
+      {revealedPicks.length > 0 && revealedEpLabel && (
+        <View style={styles.leaguePicksSection}>
+          <Text style={styles.leaguePicksTitle}>{revealedEpLabel}</Text>
+          <Text style={styles.leaguePicksSubtext}>
+            Everyone{'\u2019'}s pick {isLocked ? 'for this episode' : 'from last episode'}
+          </Text>
+          {members.map((m) => {
+            const isCurrentUser = m.user_id === currentUserId;
+            const pick = revealedPicks.find((p) => p.userName === m.name);
+            return (
+              <View
+                key={m.user_id}
+                style={[styles.leaguePickRow, isCurrentUser && styles.currentUserRow]}
               >
-                {m.name}{isCurrentUser ? ' (You)' : ''}
-              </Text>
-              <View style={styles.leaguePickRight}>
+                <Ionicons
+                  name="person-circle-outline"
+                  size={24}
+                  color={isCurrentUser ? '#e94560' : '#666'}
+                  style={{ marginRight: 10 }}
+                />
                 <Text
-                  style={[
-                    styles.leaguePickCastaway,
-                    !pick && styles.noPick,
-                  ]}
+                  style={[styles.leaguePickName, isCurrentUser && styles.currentUserName]}
                   numberOfLines={1}
                 >
-                  {pick ? pick.castawayName : 'No pick'}
+                  {m.name}{isCurrentUser ? ' (You)' : ''}
                 </Text>
+                <View style={styles.leaguePickRight}>
+                  <Text
+                    style={[
+                      styles.leaguePickCastaway,
+                      !pick && styles.noPick,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {pick ? pick.castawayName : 'No pick'}
+                  </Text>
+                </View>
               </View>
-            </View>
-          );
-        } else {
-          // Before lock: show submitted/pending status
-          const submitted = submittedUserIds.includes(m.user_id);
-          return (
-            <View
-              key={m.user_id}
-              style={[styles.leaguePickRow, isCurrentUser && styles.currentUserRow]}
-            >
-              <Ionicons
-                name={submitted ? 'checkmark-circle' : 'ellipse-outline'}
-                size={24}
-                color={submitted ? '#2ed573' : '#444'}
-                style={{ marginRight: 10 }}
-              />
-              <Text
-                style={[styles.leaguePickName, isCurrentUser && styles.currentUserName]}
-                numberOfLines={1}
+            );
+          })}
+        </View>
+      )}
+
+      {/* Current episode submission status (only when not locked) */}
+      {!isLocked && (
+        <View style={[styles.leaguePicksSection, { marginTop: 12 }]}>
+          <Text style={styles.leaguePicksTitle}>
+            Episode {currentEpisodeNumber ?? '?'} — Pick Status
+          </Text>
+          <Text style={styles.leaguePicksSubtext}>
+            {submittedCount} of {members.length} picks submitted
+          </Text>
+          {members.map((m) => {
+            const isCurrentUser = m.user_id === currentUserId;
+            const submitted = submittedUserIds.includes(m.user_id);
+            return (
+              <View
+                key={m.user_id}
+                style={[styles.leaguePickRow, isCurrentUser && styles.currentUserRow]}
               >
-                {m.name}{isCurrentUser ? ' (You)' : ''}
-              </Text>
-              <View style={styles.leaguePickRight}>
+                <Ionicons
+                  name={submitted ? 'checkmark-circle' : 'ellipse-outline'}
+                  size={24}
+                  color={submitted ? '#2ed573' : '#444'}
+                  style={{ marginRight: 10 }}
+                />
                 <Text
-                  style={[
-                    styles.pickStatusText,
-                    { color: submitted ? '#2ed573' : '#666' },
-                  ]}
+                  style={[styles.leaguePickName, isCurrentUser && styles.currentUserName]}
+                  numberOfLines={1}
                 >
-                  {submitted ? 'Submitted' : 'Pending'}
+                  {m.name}{isCurrentUser ? ' (You)' : ''}
                 </Text>
+                <View style={styles.leaguePickRight}>
+                  <Text
+                    style={[
+                      styles.pickStatusText,
+                      { color: submitted ? '#2ed573' : '#666' },
+                    ]}
+                  >
+                    {submitted ? 'Submitted' : 'Pending'}
+                  </Text>
+                </View>
               </View>
-            </View>
-          );
-        }
-      })}
+            );
+          })}
+        </View>
+      )}
     </View>
   );
 }

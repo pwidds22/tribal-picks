@@ -217,6 +217,22 @@ export async function getEpisodeByNumber(
   return data;
 }
 
+export async function getLastScoredEpisode(
+  seasonId: number
+): Promise<Episode | null> {
+  const { data, error } = await supabase
+    .from('episodes')
+    .select('*')
+    .eq('season_id', seasonId)
+    .eq('is_scored', true)
+    .order('number', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) return null;
+  return data;
+}
+
 export async function getNextEpisodeFromStart(
   seasonId: number,
   startEpisodeNumber: number
@@ -319,29 +335,17 @@ export async function getSurvivorPoolPicks(
 export async function getSurvivorPoolStatus(
   leagueId: string
 ): Promise<{ user_id: string; is_alive: boolean; username: string }[]> {
-  const { data, error } = await supabase
-    .from('survivor_pool_picks')
-    .select('user_id, is_alive, profiles(username)')
-    .eq('league_id', leagueId)
-    .order('is_alive', { ascending: false });
+  // Use the RPC which correctly handles both failed picks AND missed picks
+  const { data, error } = await supabase.rpc('get_survivor_pool_standings', {
+    p_league_id: leagueId,
+  });
 
   if (error) throw error;
 
-  // Deduplicate by user — alive if any pick is alive
-  const userMap = new Map<string, { is_alive: boolean; username: string }>();
-  for (const d of data ?? []) {
-    const existing = userMap.get(d.user_id);
-    if (!existing || d.is_alive) {
-      userMap.set(d.user_id, {
-        is_alive: d.is_alive,
-        username: (d as unknown as { profiles?: { username: string } }).profiles?.username ?? 'Unknown',
-      });
-    }
-  }
-
-  return Array.from(userMap.entries()).map(([user_id, v]) => ({
-    user_id,
-    ...v,
+  return (data ?? []).map((d: { user_id: string; username: string; is_alive: boolean }) => ({
+    user_id: d.user_id,
+    is_alive: d.is_alive,
+    username: d.username,
   }));
 }
 
