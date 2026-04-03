@@ -403,6 +403,7 @@ export default function BracketScreen() {
   // Edit/swap state
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [swapSourceIndex, setSwapSourceIndex] = useState<number | null>(null);
+  const [showScoring, setShowScoring] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -716,17 +717,22 @@ export default function BracketScreen() {
 
       {/* Instructions */}
       <View style={styles.instructions}>
-        <Text style={styles.instructionText}>
-          {isLocked
-            ? viewingMember
-              ? `Viewing ${viewingMember.display_name ?? viewingMember.username}'s bracket`
-              : 'Brackets are locked. Good luck this season!'
-            : pickedIds.length === 0
-              ? "Tap castaways in the order you think they'll be eliminated"
-              : allPicked
-                ? 'All set! Review your bracket and save.'
-                : `Pick who goes out #${pickedIds.length + 1 + positionOffset}`}
-        </Text>
+        <View style={styles.instructionRow}>
+          <Text style={styles.instructionText}>
+            {isLocked
+              ? viewingMember
+                ? `Viewing ${viewingMember.display_name ?? viewingMember.username}'s bracket`
+                : 'Brackets are locked. Good luck this season!'
+              : pickedIds.length === 0
+                ? "Tap castaways in the order you think they'll be eliminated"
+                : allPicked
+                  ? 'All set! Review your bracket and save.'
+                  : `Pick who goes out #${pickedIds.length + 1 + positionOffset}`}
+          </Text>
+          <Pressable onPress={() => setShowScoring(true)} hitSlop={12}>
+            <Ionicons name="information-circle-outline" size={20} color="#a0a0a0" />
+          </Pressable>
+        </View>
         {!isLocked && pickedIds.length > 0 && (
           <Pressable onPress={handleClearAll} hitSlop={8}>
             <Text style={styles.clearText}>Clear All</Text>
@@ -973,6 +979,57 @@ export default function BracketScreen() {
         onRemove={handleRemovePick}
         onClose={() => setEditingIndex(null)}
       />
+
+      {/* Scoring explainer modal */}
+      <Modal
+        visible={showScoring}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowScoring(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>How Scoring Works</Text>
+            <ScrollView style={styles.modalScroll}>
+              <Text style={styles.modalText}>
+                <Text style={styles.modalBold}>Your boot order sets a threshold.</Text>
+                {'\n\n'}
+                After each episode, the system counts how many total castaways have been eliminated so far. Then it checks: of the castaways you predicted would still be in the game at that point, how many actually are?
+                {'\n\n'}
+                <Text style={styles.modalBold}>The formula:</Text>
+                {'\n'}
+                Episode score = episode number {'\u00D7'} correct picks
+                {'\n\n'}
+                A castaway counts as {"\""}predicted still in{"\""} if your boot number for them is higher than the total eliminations so far.
+                {'\n\n'}
+                <Text style={styles.modalBold}>Example:</Text>
+                {'\n'}
+                You picked someone as Boot #8. After 5 total eliminations, 8 {'>'} 5, so you predicted they{"'"}re still in. If they actually are {'\u2014'} that{"'"}s a correct pick!
+                {'\n\n'}
+                <Text style={styles.modalBold}>Why later episodes are worth more:</Text>
+                {'\n'}
+                The multiplier grows each episode. Getting picks right in episode 6 earns 6{'\u00D7'} per correct pick, while episode 1 only earns 1{'\u00D7'}. So nailing the endgame matters most.
+                {'\n\n'}
+                <Text style={styles.modalBold}>Double/triple eliminations:</Text>
+                {'\n'}
+                When multiple people go home in one episode, the total elimination count jumps by 2 or 3 instead of 1. This shifts the threshold faster, so your predictions for who lasts longer get tested sooner.
+                {'\n\n'}
+                <Text style={styles.modalBold}>Winner bonus:</Text>
+                {'\n'}
+                +50 points if your Sole Survivor pick is correct!
+                {'\n\n'}
+                <Text style={styles.modalBold}>Tip:</Text> Tap a player{"'"}s name on the leaderboard to see their full score breakdown by episode.
+              </Text>
+            </ScrollView>
+            <Pressable
+              style={styles.modalCloseButton}
+              onPress={() => setShowScoring(false)}
+            >
+              <Text style={styles.modalCloseText}>Got It</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1000,10 +1057,62 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#2a2a4e',
   },
+  instructionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
   instructionText: {
     color: '#a0a0a0',
     fontSize: 14,
     flex: 1,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxHeight: '80%',
+    borderWidth: 1,
+    borderColor: '#2a2a4e',
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#e94560',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  modalScroll: {
+    marginBottom: 16,
+  },
+  modalText: {
+    color: '#ffffff',
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  modalBold: {
+    fontWeight: 'bold',
+    color: '#e94560',
+  },
+  modalCloseButton: {
+    backgroundColor: '#e94560',
+    borderRadius: 10,
+    padding: 14,
+    alignItems: 'center',
+  },
+  modalCloseText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   clearText: {
     color: '#e94560',

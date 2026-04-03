@@ -487,6 +487,21 @@ export async function getUserPoolPickHistory(
 // Standings / Leaderboard
 // ============================================
 
+export async function getBracketEpisodeScores(
+  leagueId: string,
+  userId: string
+): Promise<{ episode_number: number; episode_score: number }[]> {
+  const { data, error } = await supabase
+    .from('bracket_episode_scores')
+    .select('episode_number, episode_score')
+    .eq('league_id', leagueId)
+    .eq('user_id', userId)
+    .order('episode_number');
+
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function getBracketStandings(
   leagueId: string
 ): Promise<
