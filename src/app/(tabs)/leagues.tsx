@@ -19,7 +19,7 @@ import type { League } from '../../core/types';
 export default function LeaguesScreen() {
   const user = useAuthStore((s) => s.user);
   const authLoading = useAuthStore((s) => s.isLoading);
-  const { leagues, isLoading, fetchLeagues, invalidate } = useLeagueStore();
+  const { leagues, isLoading, error, fetchLeagues, invalidate } = useLeagueStore();
 
   useEffect(() => {
     if (user) fetchLeagues(user.id);
@@ -45,6 +45,27 @@ export default function LeaguesScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#e94560" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error && !leagues.length) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.center}>
+          <Text style={styles.errorText}>Failed to load leagues</Text>
+          <Pressable
+            style={styles.retryButton}
+            onPress={() => {
+              if (user) {
+                invalidate();
+                fetchLeagues(user.id);
+              }
+            }}
+          >
+            <Text style={styles.retryText}>Tap to Retry</Text>
+          </Pressable>
         </View>
       </SafeAreaView>
     );
@@ -163,5 +184,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#a0a0a0',
     textAlign: 'center',
+  },
+  errorText: {
+    color: '#ff4757',
+    fontSize: 16,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#e94560',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

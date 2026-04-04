@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState } from 'react-native';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
@@ -11,4 +12,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     detectSessionInUrl: false,
   },
+});
+
+// When the app returns to foreground, tell Supabase to refresh the auth token.
+// Without this, the token expires while backgrounded and isn't refreshed on resume.
+AppState.addEventListener('change', (state) => {
+  if (state === 'active') {
+    supabase.auth.startAutoRefresh();
+  } else {
+    supabase.auth.stopAutoRefresh();
+  }
 });
