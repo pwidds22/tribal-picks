@@ -27,7 +27,10 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
 
     set({ isLoading: true, error: null });
     try {
-      const leagues = await getUserLeagues(userId);
+      const leagues = await Promise.race([
+        getUserLeagues(userId),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Request timed out')), 10000)),
+      ]);
       set({ leagues, isLoading: false, lastFetched: Date.now() });
     } catch (err) {
       set({ error: err instanceof Error ? err.message : 'An error occurred', isLoading: false });

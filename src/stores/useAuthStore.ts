@@ -106,13 +106,18 @@ export const useAuthStore = create<AuthState>((set) => ({
   signOut: async () => {
     set({ signingOut: true });
     try {
-      await authSignOut();
-      set({ user: null, profile: null, signingOut: false });
-      useLeagueStore.getState().reset();
-    } catch (err) {
-      set({ error: err instanceof Error ? err.message : 'An error occurred', signingOut: false });
-      throw err; // Re-throw so UI can show Alert
+      // Timeout the server call — if token is expired, signOut can hang forever
+      await Promise.race([
+        authSignOut(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Sign out timed out')), 5000)),
+      ]);
+    } catch {
+      // Whether signOut fails or times out, still clear local state.
+      // The server session will expire on its own.
     }
+    // ALWAYS clear local state regardless of server response
+    set({ user: null, profile: null, signingOut: false });
+    useLeagueStore.getState().reset();
   },
 
   deleteAccount: async () => {
@@ -161,6 +166,23 @@ export const useAuthStore = create<AuthState>((set) => ({
         }
       }
 
+      // --- INITIAL_SESSION: the stored token may be expired.
+      // Force a server-side refresh to get a valid access token before any queries.
+      if (event === 'INITIAL_SESSION') {
+        try {
+          const { getSession: refreshSession } = await import('../services/supabase/auth');
+          await Promise.race([
+            refreshSession(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Session refresh timeout')), 8000)),
+          ]);
+        } catch {
+          // If refresh fails, the token is truly dead — force sign out
+          set({ user: null, profile: null, isLoading: false });
+          useLeagueStore.getState().reset();
+          return;
+        }
+      }
+
       // --- TOKEN_REFRESHED or INITIAL_SESSION: restore user + profile ---
 
       // If user changed (different account), clear stale league data
@@ -176,14 +198,20 @@ export const useAuthStore = create<AuthState>((set) => ({
       };
       set({ user: userObj });
 
-      // Load profile (retry once for new sign-ups where profile may not exist yet)
+      // Load profile with timeout to prevent infinite hang
       let profile: Profile | null = null;
+      const profileWithTimeout = (userId: string) =>
+        Promise.race([
+          getProfile(userId),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Profile fetch timeout')), 8000)),
+        ]);
+
       try {
-        profile = await getProfile(session.user.id);
+        profile = await profileWithTimeout(session.user.id);
       } catch {
         await new Promise((r) => setTimeout(r, 1500));
         try {
-          profile = await getProfile(session.user.id);
+          profile = await profileWithTimeout(session.user.id);
         } catch {
           // Profile still missing — will be set by next auth event or sign-in method
         }

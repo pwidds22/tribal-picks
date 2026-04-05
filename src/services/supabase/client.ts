@@ -14,8 +14,12 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
-// When the app returns to foreground, tell Supabase to refresh the auth token.
-// Without this, the token expires while backgrounded and isn't refreshed on resume.
+// Start auto-refresh immediately so expired tokens get refreshed ASAP on app load.
+// Without this, the restored session may have an expired access token and queries
+// will fail/hang until the first AppState 'active' event fires.
+supabase.auth.startAutoRefresh();
+
+// When the app moves to background, stop refreshing. On foreground, restart.
 AppState.addEventListener('change', (state) => {
   if (state === 'active') {
     supabase.auth.startAutoRefresh();
