@@ -1,7 +1,7 @@
 # Tribal Picks: Survivor Fantasy
 
 ## Project Overview
-iOS app (iPhone + iPad) for fantasy Survivor (CBS). Season 50 premieres Feb 25, 2026.
+iOS app (iPhone + iPad) for fantasy Survivor (CBS). Season 50 premiered Feb 25, 2026 — currently airing (6 episodes aired, 14 castaways remaining).
 
 ## Tech Stack
 - **Framework**: React Native + Expo (SDK 54)
@@ -58,15 +58,23 @@ See `src/core/types.ts` for exact point values per game type.
 - **Batch all changes into ONE build** — do not build, discover a problem, then build again without collecting all fixes first
 - **NEVER forget to commit all code changes BEFORE running `eas build`** — EAS uploads local files but uncommitted changes won't be in git history
 
+## Auth Persistence (IMPORTANT)
+Supabase auth in React Native requires three things to persist sessions across app restarts:
+1. **Eager `startAutoRefresh()`** in `client.ts` — call immediately on module load, not just on AppState changes (cold starts don't fire AppState 'active')
+2. **Session validation on `INITIAL_SESSION`** — the restored token may be expired; call `getSession()` with a timeout to force server-side refresh before trusting it
+3. **Timeouts on all Supabase calls** — prevent infinite hangs from stale tokens; `signOut` must clear local state regardless of server response
+
 ## Anti-Patterns
 - **DON'T** hardcode castaway data — always fetch from Supabase
 - **DON'T** put scoring logic in UI components — keep it in `src/core/scoring.ts`
 - **DON'T** allow picks after lock time — enforce at both UI and DB (RLS) level
 - **DON'T** import `services/` from `core/` — keep core pure
 - **DON'T** bump only `buildNumber` without also bumping `version` — Apple rejects resubmissions of the same version string (cost us a wasted $2 build)
+- **DON'T** remove `startAutoRefresh()` from `client.ts` module scope — this is critical for auth persistence on cold starts
+- **DON'T** trust `INITIAL_SESSION` tokens without server validation — they can be expired, causing zombie auth state (user appears logged in but all queries hang)
 
 ## Survivor Show Edge Cases
-- **Double elimination**: Two tribals in one episode → both eliminations scored for that episode
+- **Double/Triple elimination**: Multiple tribals in one episode → all eliminations scored for that episode (ep 1, 5, 6 had multiples in S50)
 - **Medevac/Quit**: Counts as elimination for scoring purposes
 - **No tribal**: Recap/reunion episodes → no picks required
 - **Idol play**: May change who goes home — score based on FINAL result
