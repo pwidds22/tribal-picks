@@ -19,6 +19,11 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 // will fail/hang until the first AppState 'active' event fires.
 supabase.auth.startAutoRefresh();
 
+// Proactively refresh the session token on app start. This fires immediately
+// (before INITIAL_SESSION even fires in the auth store), so by the time screens
+// start fetching data, the token is already fresh.
+supabase.auth.refreshSession().catch(() => {});
+
 // When the app moves to background, stop refreshing. On foreground, restart.
 AppState.addEventListener('change', (state) => {
   if (state === 'active') {
