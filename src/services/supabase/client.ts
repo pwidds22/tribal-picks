@@ -24,10 +24,22 @@ supabase.auth.startAutoRefresh();
 // start fetching data, the token is already fresh.
 supabase.auth.refreshSession().catch(() => {});
 
-// When the app moves to background, stop refreshing. On foreground, restart.
+// Track AppState for foreground/background transitions.
+// On resume: refresh the token immediately so queries use a fresh token.
+// Listeners can subscribe via onAppResume() to re-fetch data after refresh.
+const appResumeListeners = new Set<() => void>();
+export function onAppResume(listener: () => void) {
+  appResumeListeners.add(listener);
+  return () => { appResumeListeners.delete(listener); };
+}
+
 AppState.addEventListener('change', (state) => {
   if (state === 'active') {
     supabase.auth.startAutoRefresh();
+    // Force an immediate token refresh, then notify listeners (stores, screens)
+    supabase.auth.refreshSession().then(() => {
+      appResumeListeners.forEach((fn) => fn());
+    }).catch(() => {});
   } else {
     supabase.auth.stopAutoRefresh();
   }
