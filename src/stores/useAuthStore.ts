@@ -9,6 +9,7 @@ import {
   deleteAccount as authDeleteAccount,
   getProfile,
   onAuthStateChange,
+  refreshSession,
   updateDisplayName as authUpdateDisplayName,
 } from '../services/supabase/auth';
 import { useLeagueStore } from './useLeagueStore';
@@ -166,7 +167,32 @@ export const useAuthStore = create<AuthState>((set) => ({
         }
       }
 
-      // --- TOKEN_REFRESHED or INITIAL_SESSION: restore user + profile ---
+      // --- INITIAL_SESSION: the stored token is likely expired.
+      // Force a real server refresh BEFORE any screens query with a stale token.
+      // refreshSession() makes a network call (unlike getSession() which just reads storage).
+      // On success, Supabase fires TOKEN_REFRESHED which will handle user/profile setup.
+      if (event === 'INITIAL_SESSION') {
+        try {
+          await Promise.race([
+            refreshSession(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
+          ]);
+        } catch {
+          // Refresh failed — proceed with whatever token we have
+        }
+
+        // If TOKEN_REFRESHED fired during the refresh, it already incremented
+        // latestRestoreId and is handling user/profile. Bail to avoid double-work.
+        if (myId !== latestRestoreId) {
+          if (useAuthStore.getState().isLoading) {
+            set({ isLoading: false });
+          }
+          return;
+        }
+        // If refresh failed (no TOKEN_REFRESHED), fall through to set user below
+      }
+
+      // --- Set user + profile ---
 
       // If user changed (different account), clear stale league data
       const prevUser = useAuthStore.getState().user;
@@ -174,9 +200,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         useLeagueStore.getState().reset();
       }
 
-      // Set user AND clear isLoading immediately so screens can render and
-      // start fetching data. Token refresh is already happening in client.ts
-      // (refreshSession + startAutoRefresh fire on module load).
+      // Set user and clear isLoading so screens can render and fetch data
       const userObj = {
         id: session.user.id,
         email: session.user.email ?? '',

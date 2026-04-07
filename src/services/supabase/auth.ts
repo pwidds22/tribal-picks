@@ -132,6 +132,12 @@ export async function getSession() {
   return session;
 }
 
+export async function refreshSession() {
+  const { data, error } = await supabase.auth.refreshSession();
+  if (error) throw error;
+  return data.session;
+}
+
 export async function getProfile(userId: string) {
   const { data, error } = await supabase
     .from('profiles')
