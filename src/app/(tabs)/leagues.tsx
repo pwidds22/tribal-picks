@@ -32,17 +32,7 @@ export default function LeaguesScreen() {
     }
   }, [user]);
 
-  if (authLoading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color="#e94560" />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (!user) {
+  if (!user && !authLoading) {
     return (
       <SafeAreaView style={styles.container}>
         <AuthPrompt message="Sign in to create and join leagues." icon="people" />

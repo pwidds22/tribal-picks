@@ -4,7 +4,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'Tribal Picks: Survivor Fantasy',
   slug: 'tribal-picks',
-  version: '1.0.11',
+  version: '1.0.12',
   orientation: 'portrait',
   icon: './assets/icon.png',
   userInterfaceStyle: 'light',
@@ -18,7 +18,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     supportsTablet: true,
     bundleIdentifier: 'com.tribalpicks.survivorfantasy',
-    buildNumber: '21',
+    buildNumber: '22',
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
     },

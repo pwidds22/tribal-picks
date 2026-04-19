@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Profile } from '../core/types';
 import {
   signUpWithEmail,
@@ -32,205 +34,204 @@ type AuthState = {
   clearError: () => void;
 };
 
-export const useAuthStore = create<AuthState>((set) => ({
-  user: null,
-  profile: null,
-  isLoading: true,
-  signingOut: false,
-  error: null,
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      user: null,
+      profile: null,
+      isLoading: true,
+      signingOut: false,
+      error: null,
 
-  signUp: async (email, password, username) => {
-    set({ isLoading: true, error: null });
-    try {
-      const data = await signUpWithEmail(email, password, username);
-      if (data.user) {
-        set({
-          user: { id: data.user.id, email: data.user.email ?? '' },
-          isLoading: false,
-        });
-      }
-    } catch (err) {
-      set({ error: err instanceof Error ? err.message : 'An error occurred', isLoading: false });
-    }
-  },
-
-  signIn: async (email, password) => {
-    set({ isLoading: true, error: null });
-    try {
-      const data = await signInWithEmail(email, password);
-      if (data.user) {
-        const profile = await getProfile(data.user.id);
-        set({
-          user: { id: data.user.id, email: data.user.email ?? '' },
-          profile,
-          isLoading: false,
-        });
-      }
-    } catch (err) {
-      set({ error: err instanceof Error ? err.message : 'An error occurred', isLoading: false });
-    }
-  },
-
-  signInApple: async () => {
-    set({ isLoading: true, error: null });
-    try {
-      const data = await signInWithApple();
-      if (data.user) {
-        const profile = await getProfile(data.user.id);
-        set({
-          user: { id: data.user.id, email: data.user.email ?? '' },
-          profile,
-          isLoading: false,
-        });
-      } else {
-        set({ isLoading: false });
-      }
-    } catch (err) {
-      // User cancelled is not an error
-      if (err instanceof Error && 'code' in err && (err as { code: string }).code === 'ERR_REQUEST_CANCELED') {
-        set({ isLoading: false });
-        return;
-      }
-      set({ error: err instanceof Error ? err.message : 'An error occurred', isLoading: false });
-    }
-  },
-
-  signInGoogle: async () => {
-    set({ isLoading: true, error: null });
-    try {
-      await signInWithGoogle();
-      set({ isLoading: false });
-    } catch (err) {
-      set({ error: err instanceof Error ? err.message : 'An error occurred', isLoading: false });
-    }
-  },
-
-  signOut: async () => {
-    set({ signingOut: true });
-    try {
-      // Timeout the server call — if token is expired, signOut can hang forever
-      await Promise.race([
-        authSignOut(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Sign out timed out')), 5000)),
-      ]);
-    } catch {
-      // Whether signOut fails or times out, still clear local state.
-      // The server session will expire on its own.
-    }
-    // ALWAYS clear local state regardless of server response
-    set({ user: null, profile: null, signingOut: false });
-    useLeagueStore.getState().reset();
-  },
-
-  deleteAccount: async () => {
-    try {
-      await authDeleteAccount();
-      set({ user: null, profile: null });
-      useLeagueStore.getState().reset();
-    } catch (err) {
-      set({ error: err instanceof Error ? err.message : 'An error occurred' });
-      throw err;
-    }
-  },
-
-  updateDisplayName: async (name) => {
-    const state = useAuthStore.getState();
-    if (!state.user) throw new Error('Not signed in');
-    const updated = await authUpdateDisplayName(state.user.id, name);
-    set({ profile: updated });
-  },
-
-  initialize: () => {
-    // Staleness guard: each auth event increments this counter.
-    // After async work (profile fetch), we check if our ID is still
-    // current — if not, a newer event has superseded us and we skip
-    // overwriting profile (but we ALWAYS clear isLoading).
-    let latestRestoreId = 0;
-
-    const {
-      data: { subscription },
-    } = onAuthStateChange(async (event, session) => {
-      const myId = ++latestRestoreId;
-
-      // --- Signed out or no session ---
-      if (event === 'SIGNED_OUT' || !session?.user) {
-        set({ user: null, profile: null, isLoading: false });
-        useLeagueStore.getState().reset();
-        return;
-      }
-
-      // --- SIGNED_IN: sign-in methods already set user+profile, skip redundant work ---
-      if (event === 'SIGNED_IN') {
-        const current = useAuthStore.getState();
-        if (current.user?.id === session.user.id && current.profile) {
-          set({ isLoading: false });
-          return;
+      signUp: async (email, password, username) => {
+        set({ isLoading: true, error: null });
+        try {
+          const data = await signUpWithEmail(email, password, username);
+          if (data.user) {
+            set({
+              user: { id: data.user.id, email: data.user.email ?? '' },
+              isLoading: false,
+            });
+          }
+        } catch (err) {
+          set({ error: err instanceof Error ? err.message : 'An error occurred', isLoading: false });
         }
-      }
+      },
 
-      // --- INITIAL_SESSION: the stored token is likely expired.
-      // CRITICAL: Do NOT set `user` yet — setting it triggers useEffect in screens
-      // which immediately fetch data with the stale token. Keep user=null and
-      // isLoading=true until refreshSession() completes with a valid token.
-      if (event === 'INITIAL_SESSION') {
+      signIn: async (email, password) => {
+        set({ isLoading: true, error: null });
+        try {
+          const data = await signInWithEmail(email, password);
+          if (data.user) {
+            const profile = await getProfile(data.user.id);
+            set({
+              user: { id: data.user.id, email: data.user.email ?? '' },
+              profile,
+              isLoading: false,
+            });
+          }
+        } catch (err) {
+          set({ error: err instanceof Error ? err.message : 'An error occurred', isLoading: false });
+        }
+      },
+
+      signInApple: async () => {
+        set({ isLoading: true, error: null });
+        try {
+          const data = await signInWithApple();
+          if (data.user) {
+            const profile = await getProfile(data.user.id);
+            set({
+              user: { id: data.user.id, email: data.user.email ?? '' },
+              profile,
+              isLoading: false,
+            });
+          } else {
+            set({ isLoading: false });
+          }
+        } catch (err) {
+          if (err instanceof Error && 'code' in err && (err as { code: string }).code === 'ERR_REQUEST_CANCELED') {
+            set({ isLoading: false });
+            return;
+          }
+          set({ error: err instanceof Error ? err.message : 'An error occurred', isLoading: false });
+        }
+      },
+
+      signInGoogle: async () => {
+        set({ isLoading: true, error: null });
+        try {
+          await signInWithGoogle();
+          set({ isLoading: false });
+        } catch (err) {
+          set({ error: err instanceof Error ? err.message : 'An error occurred', isLoading: false });
+        }
+      },
+
+      signOut: async () => {
+        set({ signingOut: true });
         try {
           await Promise.race([
-            refreshSession(),
-            new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
+            authSignOut(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Sign out timed out')), 5000)),
           ]);
-          // refreshSession() succeeded — token is now fresh.
-          // If TOKEN_REFRESHED fired, it incremented latestRestoreId.
-          // That handler will set user + isLoading: false. Bail here.
-          if (myId !== latestRestoreId) return;
-          // TOKEN_REFRESHED didn't fire (token wasn't actually expired).
-          // Fall through to set user + isLoading: false below.
         } catch {
-          // Refresh failed — token is truly dead. Clear everything and force re-login.
-          try { await signOutLocally(); } catch { /* ignore */ }
-          set({ user: null, profile: null, isLoading: false });
-          useLeagueStore.getState().reset();
-          return;
+          // Whether signOut fails or times out, still clear local state.
         }
-      }
-
-      // --- Common path: TOKEN_REFRESHED, SIGNED_IN (new user), or INITIAL_SESSION (valid token) ---
-
-      // If user changed (different account), clear stale league data
-      const prevUser = useAuthStore.getState().user;
-      if (prevUser && prevUser.id !== session.user.id) {
+        set({ user: null, profile: null, signingOut: false });
         useLeagueStore.getState().reset();
-      }
+      },
 
-      // Set user and clear isLoading — NOW screens can fetch data with a valid token
-      set({
-        user: { id: session.user.id, email: session.user.email ?? '' },
-        isLoading: false,
-      });
-
-      // Fetch profile in background — non-blocking so UI isn't held up
-      const profileWithTimeout = (userId: string) =>
-        Promise.race([
-          getProfile(userId),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Profile fetch timeout')), 8000)),
-        ]);
-
-      try {
-        const profile = await profileWithTimeout(session.user.id);
-        if (myId === latestRestoreId) set({ profile });
-      } catch {
-        // Retry once after short delay (handles new sign-ups where profile may not exist yet)
-        await new Promise((r) => setTimeout(r, 1500));
+      deleteAccount: async () => {
         try {
-          const profile = await profileWithTimeout(session.user.id);
-          if (myId === latestRestoreId) set({ profile });
-        } catch {
-          // Profile still missing — will be set by next auth event or sign-in method
+          await authDeleteAccount();
+          set({ user: null, profile: null });
+          useLeagueStore.getState().reset();
+        } catch (err) {
+          set({ error: err instanceof Error ? err.message : 'An error occurred' });
+          throw err;
         }
-      }
-    });
+      },
 
-    return () => subscription.unsubscribe();
-  },
+      updateDisplayName: async (name) => {
+        const state = useAuthStore.getState();
+        if (!state.user) throw new Error('Not signed in');
+        const updated = await authUpdateDisplayName(state.user.id, name);
+        set({ profile: updated });
+      },
 
-  clearError: () => set({ error: null }),
-}));
+      initialize: () => {
+        let latestRestoreId = 0;
+
+        const {
+          data: { subscription },
+        } = onAuthStateChange(async (event, session) => {
+          const myId = ++latestRestoreId;
+
+          if (event === 'SIGNED_OUT' || !session?.user) {
+            set({ user: null, profile: null, isLoading: false });
+            useLeagueStore.getState().reset();
+            return;
+          }
+
+          if (event === 'SIGNED_IN') {
+            const current = useAuthStore.getState();
+            if (current.user?.id === session.user.id && current.profile) {
+              set({ isLoading: false });
+              return;
+            }
+          }
+
+          // INITIAL_SESSION: token from storage may be expired.
+          // Cached user/leagues are already showing (from persist).
+          // Just refresh the token so future fetches use a valid one.
+          if (event === 'INITIAL_SESSION') {
+            try {
+              await Promise.race([
+                refreshSession(),
+                new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
+              ]);
+              if (myId !== latestRestoreId) return;
+            } catch {
+              // Token is dead — force re-login
+              try { await signOutLocally(); } catch { /* ignore */ }
+              set({ user: null, profile: null, isLoading: false });
+              useLeagueStore.getState().reset();
+              return;
+            }
+          }
+
+          const prevUser = useAuthStore.getState().user;
+          if (prevUser && prevUser.id !== session.user.id) {
+            useLeagueStore.getState().reset();
+          }
+
+          set({
+            user: { id: session.user.id, email: session.user.email ?? '' },
+            isLoading: false,
+          });
+
+          // Fetch fresh profile in background
+          const profileWithTimeout = (userId: string) =>
+            Promise.race([
+              getProfile(userId),
+              new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Profile fetch timeout')), 8000)),
+            ]);
+
+          try {
+            const profile = await profileWithTimeout(session.user.id);
+            if (myId === latestRestoreId) set({ profile });
+          } catch {
+            await new Promise((r) => setTimeout(r, 1500));
+            try {
+              const profile = await profileWithTimeout(session.user.id);
+              if (myId === latestRestoreId) set({ profile });
+            } catch {
+              // Profile still missing
+            }
+          }
+        });
+
+        return () => subscription.unsubscribe();
+      },
+
+      clearError: () => set({ error: null }),
+    }),
+    {
+      name: 'tribal-picks-auth',
+      storage: createJSONStorage(() => AsyncStorage),
+      // Only persist user + profile. NOT isLoading/error/signingOut.
+      partialize: (state) => ({
+        user: state.user,
+        profile: state.profile,
+      }),
+      onRehydrateStorage: () => (state) => {
+        // If we have a cached user from last session, clear isLoading
+        // so screens show cached content immediately instead of a spinner.
+        if (state?.user) {
+          useAuthStore.setState({ isLoading: false });
+        }
+      },
+    },
+  ),
+);
