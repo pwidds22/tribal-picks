@@ -155,7 +155,7 @@ export async function getProfile(userId: string) {
 }
 
 export function onAuthStateChange(
-  callback: (event: string, session: { user: { id: string; email?: string } } | null) => void
+  callback: (event: string, session: { user: { id: string; email?: string }; expires_at?: number } | null) => void
 ) {
   return supabase.auth.onAuthStateChange(callback);
 }

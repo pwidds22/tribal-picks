@@ -166,22 +166,33 @@ export const useAuthStore = create<AuthState>()(
             }
           }
 
-          // INITIAL_SESSION: token from storage may be expired.
-          // Cached user/leagues are already showing (from persist).
-          // Just refresh the token so future fetches use a valid one.
+          // INITIAL_SESSION: token from storage may or may not be expired.
+          // Check expires_at to decide whether we can skip the refresh wait.
           if (event === 'INITIAL_SESSION') {
-            try {
-              await Promise.race([
-                refreshSession(),
-                new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
-              ]);
-              if (myId !== latestRestoreId) return;
-            } catch {
-              // Token is dead — force re-login
-              try { await signOutLocally(); } catch { /* ignore */ }
-              set({ user: null, profile: null, isLoading: false, authReady: true });
-              useLeagueStore.getState().reset();
-              return;
+            const now = Math.floor(Date.now() / 1000);
+            const expiresAt = session.expires_at ?? 0;
+            const tokenStillValid = expiresAt > now + 60; // 60s safety buffer
+
+            if (tokenStillValid) {
+              // Token is still valid — set authReady NOW so screens work instantly.
+              // Refresh in background to extend the token's lifetime.
+              set({ authReady: true });
+              refreshSession().catch(() => {});
+            } else {
+              // Token is expired — must wait for refresh before server calls work.
+              try {
+                await Promise.race([
+                  refreshSession(),
+                  new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
+                ]);
+                if (myId !== latestRestoreId) return;
+              } catch {
+                // Token is dead — force re-login
+                try { await signOutLocally(); } catch { /* ignore */ }
+                set({ user: null, profile: null, isLoading: false, authReady: true });
+                useLeagueStore.getState().reset();
+                return;
+              }
             }
           }
 
