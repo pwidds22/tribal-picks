@@ -169,13 +169,10 @@ export const useAuthStore = create<AuthState>((set) => ({
       }
 
       // --- INITIAL_SESSION: the stored token is likely expired.
-      // CRITICAL: Keep isLoading TRUE so screens don't query with a stale token.
-      // Supabase RLS returns EMPTY RESULTS (not errors) when the token is expired,
-      // which is why previous fixes with retry/error handling didn't work.
+      // CRITICAL: Do NOT set `user` yet — setting it triggers useEffect in screens
+      // which immediately fetch data with the stale token. Keep user=null and
+      // isLoading=true until refreshSession() completes with a valid token.
       if (event === 'INITIAL_SESSION') {
-        // Show user email on profile page, but keep isLoading: true
-        set({ user: { id: session.user.id, email: session.user.email ?? '' } });
-
         try {
           await Promise.race([
             refreshSession(),
@@ -183,10 +180,10 @@ export const useAuthStore = create<AuthState>((set) => ({
           ]);
           // refreshSession() succeeded — token is now fresh.
           // If TOKEN_REFRESHED fired, it incremented latestRestoreId.
-          // That handler will set isLoading: false. Bail here.
+          // That handler will set user + isLoading: false. Bail here.
           if (myId !== latestRestoreId) return;
-          // TOKEN_REFRESHED didn't fire (token may not have been expired).
-          // Fall through to set isLoading: false below.
+          // TOKEN_REFRESHED didn't fire (token wasn't actually expired).
+          // Fall through to set user + isLoading: false below.
         } catch {
           // Refresh failed — token is truly dead. Clear everything and force re-login.
           try { await signOutLocally(); } catch { /* ignore */ }

@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -361,6 +361,7 @@ function GameModePreview() {
 
 export default function HomeScreen() {
   const user = useAuthStore((s) => s.user);
+  const authLoading = useAuthStore((s) => s.isLoading);
   const profile = useAuthStore((s) => s.profile);
   const leagues = useLeagueStore((s) => s.leagues);
   const fetchLeagues = useLeagueStore((s) => s.fetchLeagues);
@@ -397,6 +398,16 @@ export default function HomeScreen() {
     }
     return groups;
   }, [leagues]);
+
+  if (authLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#e94560" />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
