@@ -6,6 +6,7 @@ import {
   signInWithApple,
   signInWithGoogle,
   signOut as authSignOut,
+  signOutLocally,
   deleteAccount as authDeleteAccount,
   getProfile,
   onAuthStateChange,
@@ -168,31 +169,34 @@ export const useAuthStore = create<AuthState>((set) => ({
       }
 
       // --- INITIAL_SESSION: the stored token is likely expired.
-      // Force a real server refresh BEFORE any screens query with a stale token.
-      // refreshSession() makes a network call (unlike getSession() which just reads storage).
-      // On success, Supabase fires TOKEN_REFRESHED which will handle user/profile setup.
+      // CRITICAL: Keep isLoading TRUE so screens don't query with a stale token.
+      // Supabase RLS returns EMPTY RESULTS (not errors) when the token is expired,
+      // which is why previous fixes with retry/error handling didn't work.
       if (event === 'INITIAL_SESSION') {
+        // Show user email on profile page, but keep isLoading: true
+        set({ user: { id: session.user.id, email: session.user.email ?? '' } });
+
         try {
           await Promise.race([
             refreshSession(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
           ]);
+          // refreshSession() succeeded — token is now fresh.
+          // If TOKEN_REFRESHED fired, it incremented latestRestoreId.
+          // That handler will set isLoading: false. Bail here.
+          if (myId !== latestRestoreId) return;
+          // TOKEN_REFRESHED didn't fire (token may not have been expired).
+          // Fall through to set isLoading: false below.
         } catch {
-          // Refresh failed — proceed with whatever token we have
-        }
-
-        // If TOKEN_REFRESHED fired during the refresh, it already incremented
-        // latestRestoreId and is handling user/profile. Bail to avoid double-work.
-        if (myId !== latestRestoreId) {
-          if (useAuthStore.getState().isLoading) {
-            set({ isLoading: false });
-          }
+          // Refresh failed — token is truly dead. Clear everything and force re-login.
+          try { await signOutLocally(); } catch { /* ignore */ }
+          set({ user: null, profile: null, isLoading: false });
+          useLeagueStore.getState().reset();
           return;
         }
-        // If refresh failed (no TOKEN_REFRESHED), fall through to set user below
       }
 
-      // --- Set user + profile ---
+      // --- Common path: TOKEN_REFRESHED, SIGNED_IN (new user), or INITIAL_SESSION (valid token) ---
 
       // If user changed (different account), clear stale league data
       const prevUser = useAuthStore.getState().user;
@@ -200,12 +204,11 @@ export const useAuthStore = create<AuthState>((set) => ({
         useLeagueStore.getState().reset();
       }
 
-      // Set user and clear isLoading so screens can render and fetch data
-      const userObj = {
-        id: session.user.id,
-        email: session.user.email ?? '',
-      };
-      set({ user: userObj, isLoading: false });
+      // Set user and clear isLoading — NOW screens can fetch data with a valid token
+      set({
+        user: { id: session.user.id, email: session.user.email ?? '' },
+        isLoading: false,
+      });
 
       // Fetch profile in background — non-blocking so UI isn't held up
       const profileWithTimeout = (userId: string) =>

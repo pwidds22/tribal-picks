@@ -15,18 +15,15 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 });
 
 // Start auto-refresh immediately so expired tokens get refreshed ASAP on app load.
-// Without this, the restored session may have an expired access token and queries
-// will fail/hang until the first AppState 'active' event fires.
+// Cold starts don't fire AppState 'active', so this must be called eagerly.
 supabase.auth.startAutoRefresh();
 
-// Proactively refresh the session token on app start. This fires immediately
-// (before INITIAL_SESSION even fires in the auth store), so by the time screens
-// start fetching data, the token is already fresh.
-supabase.auth.refreshSession().catch(() => {});
+// NOTE: Do NOT call refreshSession() here — it races with the INITIAL_SESSION
+// handler in useAuthStore and can consume the refresh token before the handler
+// gets to use it. Token refresh is handled exclusively in useAuthStore.initialize().
 
-// Track AppState for foreground/background transitions.
-// On resume: refresh the token immediately so queries use a fresh token.
-// Listeners can subscribe via onAppResume() to re-fetch data after refresh.
+// Listeners for app resume (foreground from background).
+// Called AFTER token refresh completes so queries use a fresh token.
 const appResumeListeners = new Set<() => void>();
 export function onAppResume(listener: () => void) {
   appResumeListeners.add(listener);
@@ -36,7 +33,7 @@ export function onAppResume(listener: () => void) {
 AppState.addEventListener('change', (state) => {
   if (state === 'active') {
     supabase.auth.startAutoRefresh();
-    // Force an immediate token refresh, then notify listeners (stores, screens)
+    // Force an immediate token refresh on resume, then notify listeners
     supabase.auth.refreshSession().then(() => {
       appResumeListeners.forEach((fn) => fn());
     }).catch(() => {});

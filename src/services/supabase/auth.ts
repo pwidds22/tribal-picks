@@ -118,6 +118,11 @@ export async function signOut() {
   if (error) throw error;
 }
 
+/** Clear local session only (no server call). Use when the token is dead. */
+export async function signOutLocally() {
+  await supabase.auth.signOut({ scope: 'local' });
+}
+
 export async function getCurrentUser() {
   const {
     data: { user },
