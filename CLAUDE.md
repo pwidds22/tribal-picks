@@ -59,10 +59,22 @@ See `src/core/types.ts` for exact point values per game type.
 - **NEVER forget to commit all code changes BEFORE running `eas build`** — EAS uploads local files but uncommitted changes won't be in git history
 
 ## Auth Persistence (IMPORTANT)
-Supabase auth in React Native requires three things to persist sessions across app restarts:
-1. **Eager `startAutoRefresh()`** in `client.ts` — call immediately on module load, not just on AppState changes (cold starts don't fire AppState 'active')
-2. **Session validation on `INITIAL_SESSION`** — the restored token may be expired; call `getSession()` with a timeout to force server-side refresh before trusting it
-3. **Timeouts on all Supabase calls** — prevent infinite hangs from stale tokens; `signOut` must clear local state regardless of server response
+Two-layer approach for instant app load after cold start:
+
+### Layer 1 — Zustand persist (cached data)
+- `useAuthStore` and `useLeagueStore` use `persist` middleware to save state to AsyncStorage
+- `onRehydrateStorage` sets `isLoading: false` when cached user exists, so screens render instantly
+
+### Layer 2 — authReady gate (server calls)
+- `authReady: boolean` in `useAuthStore` — starts `false`, set `true` after `refreshSession()` completes
+- **Every screen that fetches from Supabase must guard with `if (!authReady) return`**
+- NOT persisted — must start `false` on every cold start
+- Without this gate, stale-token queries return empty results from RLS and overwrite cached data
+
+### Other requirements
+1. **Eager `startAutoRefresh()`** in `client.ts` — call on module load (cold starts don't fire AppState 'active')
+2. **Session validation on `INITIAL_SESSION`** — call `refreshSession()` with a timeout before trusting stored token
+3. **Timeouts on all Supabase calls** — prevent infinite hangs; `signOut` must clear local state regardless
 
 ## Anti-Patterns
 - **DON'T** hardcode castaway data — always fetch from Supabase
@@ -70,6 +82,7 @@ Supabase auth in React Native requires three things to persist sessions across a
 - **DON'T** allow picks after lock time — enforce at both UI and DB (RLS) level
 - **DON'T** import `services/` from `core/` — keep core pure
 - **DON'T** bump only `buildNumber` without also bumping `version` — Apple rejects resubmissions of the same version string (cost us a wasted $2 build)
+- **DON'T** fetch from Supabase without checking `authReady` — stale tokens cause RLS to return empty results (not errors), silently overwriting cached data
 - **DON'T** remove `startAutoRefresh()` from `client.ts` module scope — this is critical for auth persistence on cold starts
 - **DON'T** trust `INITIAL_SESSION` tokens without server validation — they can be expired, causing zombie auth state (user appears logged in but all queries hang)
 
