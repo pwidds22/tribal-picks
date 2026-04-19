@@ -21,6 +21,9 @@ type AuthState = {
   user: { id: string; email: string } | null;
   profile: Profile | null;
   isLoading: boolean;
+  /** True once the stored token has been refreshed (or confirmed dead).
+   *  Screens that need valid server calls should wait for this before fetching. */
+  authReady: boolean;
   signingOut: boolean;
   error: string | null;
   signUp: (email: string, password: string, username: string) => Promise<void>;
@@ -40,6 +43,7 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       profile: null,
       isLoading: true,
+      authReady: false,
       signingOut: false,
       error: null,
 
@@ -149,7 +153,7 @@ export const useAuthStore = create<AuthState>()(
           const myId = ++latestRestoreId;
 
           if (event === 'SIGNED_OUT' || !session?.user) {
-            set({ user: null, profile: null, isLoading: false });
+            set({ user: null, profile: null, isLoading: false, authReady: true });
             useLeagueStore.getState().reset();
             return;
           }
@@ -157,7 +161,7 @@ export const useAuthStore = create<AuthState>()(
           if (event === 'SIGNED_IN') {
             const current = useAuthStore.getState();
             if (current.user?.id === session.user.id && current.profile) {
-              set({ isLoading: false });
+              set({ isLoading: false, authReady: true });
               return;
             }
           }
@@ -175,7 +179,7 @@ export const useAuthStore = create<AuthState>()(
             } catch {
               // Token is dead — force re-login
               try { await signOutLocally(); } catch { /* ignore */ }
-              set({ user: null, profile: null, isLoading: false });
+              set({ user: null, profile: null, isLoading: false, authReady: true });
               useLeagueStore.getState().reset();
               return;
             }
@@ -189,6 +193,7 @@ export const useAuthStore = create<AuthState>()(
           set({
             user: { id: session.user.id, email: session.user.email ?? '' },
             isLoading: false,
+            authReady: true,
           });
 
           // Fetch fresh profile in background
@@ -220,7 +225,7 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'tribal-picks-auth',
       storage: createJSONStorage(() => AsyncStorage),
-      // Only persist user + profile. NOT isLoading/error/signingOut.
+      // Only persist user + profile. NOT isLoading/error/signingOut/authReady.
       partialize: (state) => ({
         user: state.user,
         profile: state.profile,

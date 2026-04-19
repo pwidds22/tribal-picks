@@ -31,8 +31,11 @@ import type {
 export default function LeagueDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const user = useAuthStore((s) => s.user);
+  const authReady = useAuthStore((s) => s.authReady);
   const deleteLeague = useLeagueStore((s) => s.deleteLeague);
-  const [league, setLeague] = useState<League | null>(null);
+  // Pull cached league from the persisted leagues store for instant display
+  const cachedLeague = useLeagueStore((s) => s.leagues.find((l) => l.id === id));
+  const [league, setLeague] = useState<League | null>(cachedLeague ?? null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [bracketStandings, setBracketStandings] = useState<LeaderboardEntry[]>(
     []
@@ -41,19 +44,29 @@ export default function LeagueDetailScreen() {
     SurvivorPoolStandingEntry[]
   >([]);
   const [memberCount, setMemberCount] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
+  // Start as not-loading if we have cached league data to show
+  const [isLoading, setIsLoading] = useState(!cachedLeague);
 
+  // Only fetch fresh data from the server once the auth token is valid.
+  // On cold start authReady is false until refreshSession() completes,
+  // so we show cached league info instantly and load standings once ready.
   useEffect(() => {
-    if (!id) return;
+    if (!id || !authReady) return;
     loadLeague();
-  }, [id]);
+  }, [id, authReady]);
 
   const loadLeague = async () => {
+    // If we already have cached data, don't show full-screen spinner —
+    // just load standings in the background
+    if (!league) setIsLoading(true);
     try {
       const leagueData = await getLeague(id!);
       setLeague(leagueData);
 
-      if (!leagueData) return;
+      if (!leagueData) {
+        setIsLoading(false);
+        return;
+      }
 
       if (leagueData.game_type === 'bracket') {
         const raw = await getBracketStandings(id!);
@@ -133,7 +146,8 @@ export default function LeagueDetailScreen() {
 
   const isCommissioner = user?.id === league?.commissioner_id;
 
-  if (isLoading) {
+  // Full-screen spinner only if we have NO cached league data at all
+  if (isLoading && !league) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#e94560" />
@@ -148,6 +162,9 @@ export default function LeagueDetailScreen() {
       </View>
     );
   }
+
+  // Whether standings are still loading (cached league showing, server fetch pending)
+  const standingsLoading = isLoading || !authReady;
 
   const gameTypeLabel =
     league.game_type === 'bracket'
@@ -184,9 +201,16 @@ export default function LeagueDetailScreen() {
         </Pressable>
       </View>
 
-      <Text style={styles.sectionTitle}>Standings ({memberCount})</Text>
+      <Text style={styles.sectionTitle}>
+        Standings{standingsLoading ? '' : ` (${memberCount})`}
+      </Text>
 
-      {league.game_type === 'bracket' ? (
+      {standingsLoading ? (
+        <View style={styles.standingsLoading}>
+          <ActivityIndicator size="small" color="#e94560" />
+          <Text style={styles.standingsLoadingText}>Loading standings…</Text>
+        </View>
+      ) : league.game_type === 'bracket' ? (
         <Leaderboard
           gameType="bracket"
           entries={bracketStandings}
@@ -319,6 +343,15 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     paddingHorizontal: 20,
     marginBottom: 12,
+  },
+  standingsLoading: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    gap: 12,
+  },
+  standingsLoadingText: {
+    color: '#a0a0a0',
+    fontSize: 14,
   },
   deleteButton: {
     marginHorizontal: 20,

@@ -37,6 +37,7 @@ import type { Castaway, Episode, Season } from '../../core/types';
 export default function SurvivorPoolScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
   const user = useAuthStore((s) => s.user);
+  const authReady = useAuthStore((s) => s.authReady);
 
   const [castaways, setCastaways] = useState<Castaway[]>([]);
   const [allCastawaysList, setAllCastawaysList] = useState<Castaway[]>([]);
@@ -67,9 +68,11 @@ export default function SurvivorPoolScreen() {
     { user_id: string; name: string }[]
   >([]);
 
+  // Wait for auth token to be refreshed before hitting Supabase
   useEffect(() => {
+    if (!authReady) return;
     loadData();
-  }, []);
+  }, [authReady]);
 
   const loadData = async () => {
     try {

@@ -12,6 +12,7 @@ import {
   getLeague,
   getEpisodes,
 } from '../../services/supabase/queries';
+import { useAuthStore } from '../../stores/useAuthStore';
 import { isEpisodeLocked } from '../../core/locks';
 import type { BracketPick, Castaway, League } from '../../core/types';
 
@@ -29,6 +30,7 @@ export default function UserPicksScreen() {
     gameType: string;
   }>();
   const { leagueId, userId, userName, gameType } = params;
+  const authReady = useAuthStore((s) => s.authReady);
 
   const [loading, setLoading] = useState(true);
   const [bracketPicks, setBracketPicks] = useState<(BracketPick & { castaway_name: string; is_eliminated: boolean; elimination_order: number | null })[]>([]);
@@ -37,9 +39,11 @@ export default function UserPicksScreen() {
   const [poolHistory, setPoolHistory] = useState<PoolPickRow[]>([]);
   const [league, setLeague] = useState<League | null>(null);
 
+  // Wait for auth token to be refreshed before hitting Supabase
   useEffect(() => {
+    if (!authReady) return;
     loadData();
-  }, [leagueId, userId, gameType]);
+  }, [leagueId, userId, gameType, authReady]);
 
   async function loadData() {
     if (!leagueId || !userId) return;

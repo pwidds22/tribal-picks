@@ -384,6 +384,7 @@ function SwapModeBanner({
 export default function BracketScreen() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
   const user = useAuthStore((s) => s.user);
+  const authReady = useAuthStore((s) => s.authReady);
   const [castaways, setCastaways] = useState<Castaway[]>([]);
   const [pickedIds, setPickedIds] = useState<number[]>([]);
   const [savedPickedIds, setSavedPickedIds] = useState<number[]>([]);
@@ -405,9 +406,11 @@ export default function BracketScreen() {
   const [swapSourceIndex, setSwapSourceIndex] = useState<number | null>(null);
   const [showScoring, setShowScoring] = useState(false);
 
+  // Wait for auth token to be refreshed before hitting Supabase
   useEffect(() => {
+    if (!authReady) return;
     loadData();
-  }, []);
+  }, [authReady]);
 
   const loadData = async () => {
     try {

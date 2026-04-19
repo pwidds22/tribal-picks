@@ -124,9 +124,10 @@ function ActionBanner({
 
   useFocusEffect(
     useCallback(() => {
-      const user = useAuthStore.getState().user;
+      const { user, authReady } = useAuthStore.getState();
       const allLeagues = [...bracketLeagues, ...poolLeagues];
-      if (!user || allLeagues.length === 0) {
+      // Don't fire server calls until the auth token is valid
+      if (!user || !authReady || allLeagues.length === 0) {
         setLeaguesNeedingPicks([]);
         return;
       }
@@ -362,6 +363,7 @@ function GameModePreview() {
 export default function HomeScreen() {
   const user = useAuthStore((s) => s.user);
   const authLoading = useAuthStore((s) => s.isLoading);
+  const authReady = useAuthStore((s) => s.authReady);
   const profile = useAuthStore((s) => s.profile);
   const leagues = useLeagueStore((s) => s.leagues);
   const fetchLeagues = useLeagueStore((s) => s.fetchLeagues);
@@ -370,15 +372,15 @@ export default function HomeScreen() {
   const [countdownActive, setCountdownActive] = useState(false);
 
   useEffect(() => {
-    fetchSeason();
-    if (user) fetchLeagues(user.id);
-  }, [user]);
+    fetchSeason(); // public data, no auth needed
+    if (user && authReady) fetchLeagues(user.id);
+  }, [user, authReady]);
 
   // Re-fetch leagues whenever the home tab regains focus (e.g. after creating a league)
   useFocusEffect(
     useCallback(() => {
-      if (user) fetchLeagues(user.id);
-    }, [user]),
+      if (user && authReady) fetchLeagues(user.id);
+    }, [user, authReady]),
   );
 
   useEffect(() => {

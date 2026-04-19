@@ -19,11 +19,12 @@ import type { League } from '../../core/types';
 export default function LeaguesScreen() {
   const user = useAuthStore((s) => s.user);
   const authLoading = useAuthStore((s) => s.isLoading);
+  const authReady = useAuthStore((s) => s.authReady);
   const { leagues, isLoading, error, fetchLeagues, invalidate } = useLeagueStore();
 
   useEffect(() => {
-    if (user) fetchLeagues(user.id);
-  }, [user]);
+    if (user && authReady) fetchLeagues(user.id);
+  }, [user, authReady]);
 
   const handleRefresh = useCallback(() => {
     if (user) {
