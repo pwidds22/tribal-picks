@@ -122,11 +122,14 @@ function ActionBanner({
   // Track which leagues still need picks — re-check on every focus
   const [leaguesNeedingPicks, setLeaguesNeedingPicks] = useState<League[]>([]);
 
+  // Subscribe reactively (not getState()) so the check re-runs the moment
+  // authReady flips true on cold start, instead of waiting for a refocus.
+  const user = useAuthStore((s) => s.user);
+  const authReady = useAuthStore((s) => s.authReady);
+
   useFocusEffect(
     useCallback(() => {
-      const { user, authReady } = useAuthStore.getState();
       const allLeagues = [...bracketLeagues, ...poolLeagues];
-      // Don't fire server calls until the auth token is valid
       if (!user || !authReady || allLeagues.length === 0) {
         setLeaguesNeedingPicks([]);
         return;
@@ -154,7 +157,7 @@ function ActionBanner({
         }
       });
       return () => { cancelled = true; };
-    }, [bracketLeagues, poolLeagues, nextEpisodeId]),
+    }, [user, authReady, bracketLeagues, poolLeagues, nextEpisodeId]),
   );
 
   if (leagues.length === 0) {

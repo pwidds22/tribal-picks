@@ -59,22 +59,40 @@ See `src/core/types.ts` for exact point values per game type.
 - **NEVER forget to commit all code changes BEFORE running `eas build`** — EAS uploads local files but uncommitted changes won't be in git history
 
 ## Auth Persistence (IMPORTANT)
-Two-layer approach for instant app load after cold start:
+Core principle: **never block the UI on a token refresh.** supabase-js's `getSession()`
+refreshes an expired token on demand (deduped across callers) before any query goes
+out, so queries can never use a stale token — they just wait exactly one refresh
+round trip in the worst case.
 
 ### Layer 1 — Zustand persist (cached data)
 - `useAuthStore` and `useLeagueStore` use `persist` middleware to save state to AsyncStorage
 - `onRehydrateStorage` sets `isLoading: false` when cached user exists, so screens render instantly
 
 ### Layer 2 — authReady gate (server calls)
-- `authReady: boolean` in `useAuthStore` — starts `false`, set `true` after `refreshSession()` completes
-- **Every screen that fetches from Supabase must guard with `if (!authReady) return`**
+- `authReady: boolean` in `useAuthStore` — flips `true` synchronously on `INITIAL_SESSION` (no awaited refresh)
+- Screens that fetch guard with `if (!authReady) return` AND must re-run when it flips:
+  subscribe reactively (`useAuthStore((s) => s.authReady)`) and put it in effect deps —
+  never read it via `getState()` inside a focus effect
 - NOT persisted — must start `false` on every cold start
-- Without this gate, stale-token queries return empty results from RLS and overwrite cached data
 
-### Other requirements
-1. **Eager `startAutoRefresh()`** in `client.ts` — call on module load (cold starts don't fire AppState 'active')
-2. **Session validation on `INITIAL_SESSION`** — call `refreshSession()` with a timeout before trusting stored token
-3. **Timeouts on all Supabase calls** — prevent infinite hangs; `signOut` must clear local state regardless
+### Hard rules (each one was a production bug)
+1. **The `onAuthStateChange` callback must be synchronous** — auth-js awaits every
+   subscriber, so awaited network inside the callback stalls its whole event pipeline.
+   Refresh + profile fetches run as fire-and-forget background tasks.
+2. **Bounded global fetch** — `client.ts` passes a 15s aborting fetch via `global.fetch`.
+   Without it, iOS lets a stalled refresh socket hang 60+s and ALL queries (even public
+   data) queue behind it via `initializePromise`/the internal auth lock.
+3. **Never force `refreshSession()` on app resume or cold start** — the auto-refresh
+   ticker + on-demand refresh in `getSession()` already handle it; a forced refresh
+   just holds the auth lock that every query needs.
+4. **Sign out ONLY on definitive auth errors** (`isTransientAuthError()` false, e.g.
+   revoked refresh token). Network failures/timeouts must never sign the user out or
+   wipe the cache.
+5. **Empty-result guard** — if a fetch returns empty while the cache is non-empty,
+   verify a session exists before accepting it (failed refresh → anon-key fallback →
+   RLS returns zero rows, not an error). See `fetchLeagues`.
+6. **Eager `startAutoRefresh()`** in `client.ts` module scope, plus store-level
+   `Promise.race` timeouts as defense; `signOut` must clear local state regardless
 
 ## Anti-Patterns
 - **DON'T** hardcode castaway data — always fetch from Supabase
@@ -82,9 +100,13 @@ Two-layer approach for instant app load after cold start:
 - **DON'T** allow picks after lock time — enforce at both UI and DB (RLS) level
 - **DON'T** import `services/` from `core/` — keep core pure
 - **DON'T** bump only `buildNumber` without also bumping `version` — Apple rejects resubmissions of the same version string (cost us a wasted $2 build)
-- **DON'T** fetch from Supabase without checking `authReady` — stale tokens cause RLS to return empty results (not errors), silently overwriting cached data
+- **DON'T** await Supabase calls inside the `onAuthStateChange` callback — auth-js awaits every subscriber, so this stalls its event pipeline (and can serialize behind the auth lock)
+- **DON'T** block UI/data on a token refresh (`await refreshSession()` before setting `authReady`, forced refresh on resume) — `getSession()` self-heals expired tokens on demand; blocking turned one stalled refresh into 1-2 min of empty screens
+- **DON'T** sign the user out on transient auth errors (timeouts, offline) — only definitive rejections (revoked/used refresh token); check `isTransientAuthError()`
+- **DON'T** accept an empty query result over a non-empty cache without confirming a session exists — failed refresh → anon-key fallback → RLS returns empty rows, not errors
+- **DON'T** read `authReady` via `getState()` inside effects — subscribe reactively and include it in deps, or the screen won't fetch when it flips (forces user to "click around" to load)
 - **DON'T** remove `startAutoRefresh()` from `client.ts` module scope — this is critical for auth persistence on cold starts
-- **DON'T** trust `INITIAL_SESSION` tokens without server validation — they can be expired, causing zombie auth state (user appears logged in but all queries hang)
+- **DON'T** remove the bounded `global.fetch` wrapper in `client.ts` — without it a stalled iOS socket hangs 60+s and every query in the app queues behind it
 
 ## Survivor Show Edge Cases
 - **Double/Triple elimination**: Multiple tribals in one episode → all eliminations scored for that episode (ep 1, 5, 6 had multiples in S50)

@@ -28,10 +28,11 @@ export default function ProfileScreen() {
   const [saving, setSaving] = useState(false);
 
   // Fetch leagues when Profile tab gains focus (don't rely solely on Home tab)
+  const authReady = useAuthStore((s) => s.authReady);
   useFocusEffect(
     useCallback(() => {
-      if (user) fetchLeagues(user.id);
-    }, [user, fetchLeagues]),
+      if (user && authReady) fetchLeagues(user.id);
+    }, [user, authReady, fetchLeagues]),
   );
 
   const handleSignOut = async () => {

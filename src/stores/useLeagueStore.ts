@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { League } from '../core/types';
 import { getUserLeagues, deleteLeague as deleteLeagueQuery } from '../services/supabase/queries';
+import { getSession } from '../services/supabase/auth';
 import { onAppResume } from '../services/supabase/client';
 
 type LeagueState = {
@@ -36,6 +37,14 @@ export const useLeagueStore = create<LeagueState>()(
             getUserLeagues(userId),
             new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Request timed out')), 10000)),
           ]);
+          // An empty result while we hold a non-empty cache is suspicious:
+          // if the token refresh failed, supabase-js silently falls back to
+          // the anon key and RLS returns zero rows instead of an error.
+          // Only accept the empty list when a session provably exists.
+          if (leagues.length === 0 && get().leagues.length > 0) {
+            const session = await getSession();
+            if (!session) throw new Error('No session — keeping cached leagues');
+          }
           set({ leagues, isLoading: false, lastFetched: Date.now() });
         } catch (err) {
           if (!_retry) {

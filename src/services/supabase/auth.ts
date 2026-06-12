@@ -1,7 +1,15 @@
 import { Platform } from 'react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
+import { isAuthRetryableFetchError } from '@supabase/supabase-js';
 import { supabase } from './client';
+
+/** True when an auth failure is a network blip (offline, timeout, 5xx) rather
+ *  than a definitive rejection (revoked/used refresh token). Transient errors
+ *  must never sign the user out — the auto-refresh ticker retries them. */
+export function isTransientAuthError(err: unknown): boolean {
+  return isAuthRetryableFetchError(err);
+}
 
 // ============================================
 // Email Auth

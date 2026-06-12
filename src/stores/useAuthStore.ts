@@ -14,6 +14,7 @@ import {
   onAuthStateChange,
   refreshSession,
   updateDisplayName as authUpdateDisplayName,
+  isTransientAuthError,
 } from '../services/supabase/auth';
 import { useLeagueStore } from './useLeagueStore';
 
@@ -147,9 +148,33 @@ export const useAuthStore = create<AuthState>()(
       initialize: () => {
         let latestRestoreId = 0;
 
+        // Runs OUTSIDE the auth callback so auth-js's event pipeline (which
+        // awaits every subscriber) is never blocked on a network round trip.
+        const fetchProfileInBackground = (userId: string, myId: number) => {
+          const profileWithTimeout = () =>
+            Promise.race([
+              getProfile(userId),
+              new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Profile fetch timeout')), 8000)),
+            ]);
+          void (async () => {
+            try {
+              const profile = await profileWithTimeout();
+              if (myId === latestRestoreId) set({ profile });
+            } catch {
+              await new Promise((r) => setTimeout(r, 1500));
+              try {
+                const profile = await profileWithTimeout();
+                if (myId === latestRestoreId) set({ profile });
+              } catch {
+                // Keep whatever profile is cached
+              }
+            }
+          })();
+        };
+
         const {
           data: { subscription },
-        } = onAuthStateChange(async (event, session) => {
+        } = onAuthStateChange((event, session) => {
           const myId = ++latestRestoreId;
 
           if (event === 'SIGNED_OUT' || !session?.user) {
@@ -166,33 +191,22 @@ export const useAuthStore = create<AuthState>()(
             }
           }
 
-          // INITIAL_SESSION: token from storage may or may not be expired.
-          // Check expires_at to decide whether we can skip the refresh wait.
+          // Token freshness is supabase-js's job: getSession() refreshes an
+          // expired token on demand (deduped) before any query goes out, so
+          // the UI must NEVER wait on a refresh. On cold start, if the token
+          // is near expiry, kick a refresh now so the first queries don't pay
+          // for it — but only a definitive auth rejection signs the user out.
+          // Network failures keep the session; the auto-refresh ticker retries.
           if (event === 'INITIAL_SESSION') {
             const now = Math.floor(Date.now() / 1000);
             const expiresAt = session.expires_at ?? 0;
-            const tokenStillValid = expiresAt > now + 60; // 60s safety buffer
-
-            if (tokenStillValid) {
-              // Token is still valid — set authReady NOW so screens work instantly.
-              // Refresh in background to extend the token's lifetime.
-              set({ authReady: true });
-              refreshSession().catch(() => {});
-            } else {
-              // Token is expired — must wait for refresh before server calls work.
-              try {
-                await Promise.race([
-                  refreshSession(),
-                  new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
-                ]);
-                if (myId !== latestRestoreId) return;
-              } catch {
-                // Token is dead — force re-login
+            if (expiresAt < now + 300) {
+              refreshSession().catch(async (err) => {
+                if (isTransientAuthError(err)) return;
                 try { await signOutLocally(); } catch { /* ignore */ }
                 set({ user: null, profile: null, isLoading: false, authReady: true });
                 useLeagueStore.getState().reset();
-                return;
-              }
+              });
             }
           }
 
@@ -207,24 +221,11 @@ export const useAuthStore = create<AuthState>()(
             authReady: true,
           });
 
-          // Fetch fresh profile in background
-          const profileWithTimeout = (userId: string) =>
-            Promise.race([
-              getProfile(userId),
-              new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Profile fetch timeout')), 8000)),
-            ]);
-
-          try {
-            const profile = await profileWithTimeout(session.user.id);
-            if (myId === latestRestoreId) set({ profile });
-          } catch {
-            await new Promise((r) => setTimeout(r, 1500));
-            try {
-              const profile = await profileWithTimeout(session.user.id);
-              if (myId === latestRestoreId) set({ profile });
-            } catch {
-              // Profile still missing
-            }
+          // Refresh the cached profile on cold start; on later events
+          // (e.g. TOKEN_REFRESHED every ~55min) only fetch if it's missing.
+          const haveProfile = useAuthStore.getState().profile != null;
+          if (event === 'INITIAL_SESSION' || !haveProfile) {
+            fetchProfileInBackground(session.user.id, myId);
           }
         });
 

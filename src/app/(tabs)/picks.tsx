@@ -29,26 +29,27 @@ type PickStatus = {
 export default function PicksScreen() {
   const user = useAuthStore((s) => s.user);
   const authLoading = useAuthStore((s) => s.isLoading);
+  const authReady = useAuthStore((s) => s.authReady);
   const { leagues, fetchLeagues } = useLeagueStore();
   const { season, nextEpisode, fetchSeason } = useSeasonStore();
   const [pickStatuses, setPickStatuses] = useState<PickStatus[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (user) {
+    if (user && authReady) {
       fetchLeagues(user.id);
       fetchSeason();
     }
-  }, [user]);
+  }, [user, authReady]);
 
   useEffect(() => {
-    if (!user || !leagues.length) {
+    if (!user || !authReady || !leagues.length) {
       setPickStatuses([]);
       setIsLoading(false);
       return;
     }
     checkPickStatuses();
-  }, [user, leagues, season, nextEpisode]);
+  }, [user, authReady, leagues, season, nextEpisode]);
 
   const checkPickStatuses = async () => {
     if (!user) return;
