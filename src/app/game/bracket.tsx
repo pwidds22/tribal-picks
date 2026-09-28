@@ -20,7 +20,7 @@ import { useAuthStore } from '../../stores/useAuthStore';
 import {
   getCastaways,
   getCastawaysAliveAtEpisode,
-  getActiveSeason,
+  getSeason,
   getLeague,
   getEpisodeByNumber,
   saveBracketPicks,
@@ -391,6 +391,7 @@ export default function BracketScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
+  const [lockDate, setLockDate] = useState<string | null>(null);
 
   const [positionOffset, setPositionOffset] = useState(0);
 
@@ -412,25 +413,33 @@ export default function BracketScreen() {
     loadData();
   }, [authReady]);
 
+  // Brackets lock at air time even if the screen was opened before it.
+  useEffect(() => {
+    if (!lockDate || isLocked) return;
+    const interval = setInterval(() => {
+      if (isEpisodeLocked(lockDate)) setIsLocked(true);
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [lockDate, isLocked]);
+
   const loadData = async () => {
     try {
-      const season = await getActiveSeason();
-      if (!season) return;
+      if (!leagueId) throw new Error('Missing league');
+      const league = await getLeague(leagueId);
+      if (!league) throw new Error('League not found');
+      // Always the league's own season — old leagues must keep showing their season.
+      const season = await getSeason(league.season_id);
+      const startEp = league.start_episode;
 
-      // Fetch league to get start_episode
-      let startEp = 1;
-      if (leagueId) {
-        const league = await getLeague(leagueId);
-        if (league) startEp = league.start_episode;
-      }
-
-      // Determine lock time based on start episode
+      // Locks at the start episode's air time (the premiere for start_episode 1)
       let locked = false;
       if (startEp === 1) {
         locked = isBracketLocked(season.premiere_date);
+        setLockDate(season.premiere_date);
       } else {
         const episode = await getEpisodeByNumber(season.id, startEp);
         locked = episode ? isEpisodeLocked(episode.air_date) : true;
+        setLockDate(episode?.air_date ?? null);
       }
       setIsLocked(locked);
 
@@ -461,8 +470,11 @@ export default function BracketScreen() {
         const members = await getLeagueMembers(leagueId);
         setLeagueMembers(members);
       }
-    } catch {
-      Alert.alert('Error', 'Failed to load bracket data. Please try again.');
+    } catch (err) {
+      Alert.alert(
+        'Error',
+        err instanceof Error ? `Failed to load bracket: ${err.message}` : 'Failed to load bracket data. Please try again.',
+      );
     } finally {
       setIsLoading(false);
     }
@@ -584,6 +596,11 @@ export default function BracketScreen() {
 
   const handleSave = async () => {
     if (!leagueId || !user || isLocked || !allPicked) return;
+    if (lockDate && isEpisodeLocked(lockDate)) {
+      setIsLocked(true);
+      Alert.alert('Bracket Locked', 'The episode has started — brackets are locked.');
+      return;
+    }
 
     setIsSaving(true);
     try {

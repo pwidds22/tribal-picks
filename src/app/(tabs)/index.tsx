@@ -7,11 +7,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useLeagueStore } from '../../stores/useLeagueStore';
 import { useSeasonStore } from '../../stores/useSeasonStore';
-import { getMillisUntilLock } from '../../core/locks';
+import { getLeagueLockDate, getMillisUntilLock, isEpisodeLocked } from '../../core/locks';
 import { getBracketPicks, getSurvivorPoolPicks } from '../../services/supabase/queries';
 import { GAME_TYPE_META } from '../../core/gameTypes';
 import AnnouncementBanner from '../../components/AnnouncementBanner';
-import type { League } from '../../core/types';
+import type { Episode, League } from '../../core/types';
 
 // ---------- Sub-Components ----------
 
@@ -103,22 +103,18 @@ function CountdownHero({
 /** Contextual action banner that changes based on user state */
 function ActionBanner({
   leagues,
+  hasPastLeagues,
+  seasonNumber,
   hasActiveCountdown,
-  nextEpisodeId,
+  episodes,
 }: {
+  /** Current-season leagues only. */
   leagues: League[];
+  hasPastLeagues: boolean;
+  seasonNumber: number | null;
   hasActiveCountdown: boolean;
-  nextEpisodeId: number | null;
+  episodes: Episode[];
 }) {
-  const bracketLeagues = useMemo(
-    () => leagues.filter((l) => l.game_type === 'bracket'),
-    [leagues],
-  );
-  const poolLeagues = useMemo(
-    () => leagues.filter((l) => l.game_type === 'survivor_pool'),
-    [leagues],
-  );
-
   // Track which leagues still need picks — re-check on every focus
   const [leaguesNeedingPicks, setLeaguesNeedingPicks] = useState<League[]>([]);
 
@@ -129,50 +125,65 @@ function ActionBanner({
 
   useFocusEffect(
     useCallback(() => {
-      const allLeagues = [...bracketLeagues, ...poolLeagues];
-      if (!user || !authReady || allLeagues.length === 0) {
+      if (!user || !authReady || leagues.length === 0) {
         setLeaguesNeedingPicks([]);
         return;
       }
       let cancelled = false;
       Promise.all(
-        allLeagues.map(async (league) => {
+        leagues.map(async (league) => {
           if (league.game_type === 'bracket') {
+            // A locked bracket can't be changed — never nag about it
+            if (isEpisodeLocked(getLeagueLockDate(league.start_episode, episodes))) {
+              return { league, hasPicks: true };
+            }
             const picks = await getBracketPicks(league.id, user.id);
             return { league, hasPicks: picks.length > 0 };
           }
-          // Survivor pool — check if pick exists for next episode
-          if (nextEpisodeId) {
+          if (league.game_type === 'survivor_pool') {
+            const next = episodes.find((e) => !e.is_scored && e.number >= league.start_episode);
+            if (!next || isEpisodeLocked(next.air_date)) return { league, hasPicks: true };
             const picks = await getSurvivorPoolPicks(league.id, user.id);
-            const hasCurrentPick = picks.some((p) => p.episode_id === nextEpisodeId);
-            return { league, hasPicks: hasCurrentPick };
+            return { league, hasPicks: picks.some((p) => p.episode_id === next.id) };
           }
           return { league, hasPicks: true };
         }),
-      ).then((results) => {
-        if (!cancelled) {
-          setLeaguesNeedingPicks(
-            results.filter((r) => !r.hasPicks).map((r) => r.league),
-          );
-        }
-      });
+      )
+        .then((results) => {
+          if (!cancelled) {
+            setLeaguesNeedingPicks(
+              results.filter((r) => !r.hasPicks).map((r) => r.league),
+            );
+          }
+        })
+        .catch(() => {
+          // Network blip: keep the previous banner state
+        });
       return () => { cancelled = true; };
-    }, [user, authReady, bracketLeagues, poolLeagues, nextEpisodeId]),
+    }, [user, authReady, leagues, episodes]),
   );
 
   if (leagues.length === 0) {
     return (
-      <View style={bannerStyles.container}>
+      <Pressable
+        style={bannerStyles.container}
+        onPress={() => router.push('/league/create')}
+      >
         <Ionicons name="flame-outline" size={22} color="#e94560" />
         <View style={bannerStyles.content}>
           <Text style={bannerStyles.headline}>
-            Start Your Survivor Journey
+            {hasPastLeagues && seasonNumber
+              ? `Season ${seasonNumber} is here!`
+              : 'Start Your Survivor Journey'}
           </Text>
           <Text style={bannerStyles.subtitle}>
-            Create a league and invite friends to play
+            {hasPastLeagues
+              ? 'Start a new league and bring your tribe back'
+              : 'Create a league and invite friends to play'}
           </Text>
         </View>
-      </View>
+        <Ionicons name="chevron-forward" size={18} color="#666" />
+      </Pressable>
     );
   }
 
@@ -241,8 +252,11 @@ function ActionBanner({
 /** Enhanced league card with game type accent stripe and status */
 function LeagueCardEnhanced({
   league,
+  seasonNumber = null,
 }: {
   league: League;
+  /** Set for past-season leagues so they read as archived. */
+  seasonNumber?: number | null;
 }) {
   const meta = GAME_TYPE_META[league.game_type] ?? {
     label: league.game_type,
@@ -275,7 +289,10 @@ function LeagueCardEnhanced({
         <View style={leagueStyles.info}>
           <Text style={leagueStyles.name}>{league.name}</Text>
           <View style={leagueStyles.metaRow}>
-            <Text style={leagueStyles.type}>{meta.label}</Text>
+            <Text style={leagueStyles.type}>
+              {meta.label}
+              {seasonNumber != null ? ` • Season ${seasonNumber}` : ''}
+            </Text>
             {league.is_public && (
               <View style={leagueStyles.publicBadge}>
                 <Text style={leagueStyles.publicBadgeText}>Public</Text>
@@ -311,8 +328,8 @@ function GameModePreview() {
           </View>
           <Text style={previewStyles.cardTitle}>Elimination Bracket</Text>
           <Text style={previewStyles.cardDesc}>
-            Predict the full boot order before the premiere. Set it and forget
-            it.
+            Predict the full boot order before your league starts. Set it and
+            forget it.
           </Text>
           <View style={previewStyles.pills}>
             <View style={[previewStyles.pill, { backgroundColor: '#0d2e0d' }]}>
@@ -370,9 +387,22 @@ export default function HomeScreen() {
   const profile = useAuthStore((s) => s.profile);
   const leagues = useLeagueStore((s) => s.leagues);
   const fetchLeagues = useLeagueStore((s) => s.fetchLeagues);
-  const { season, nextEpisode, fetchSeason } = useSeasonStore();
+  const { season, seasons, episodes, nextEpisode, fetchSeason } = useSeasonStore();
 
   const [countdownActive, setCountdownActive] = useState(false);
+
+  const currentLeagues = useMemo(
+    () => (season ? leagues.filter((l) => l.season_id === season.id) : leagues),
+    [leagues, season],
+  );
+  const pastLeagues = useMemo(
+    () => (season ? leagues.filter((l) => l.season_id !== season.id) : []),
+    [leagues, season],
+  );
+  const seasonNumberById = useMemo(
+    () => new Map(seasons.map((s) => [s.id, s.number])),
+    [seasons],
+  );
 
   useEffect(() => {
     fetchSeason(); // public data, no auth needed
@@ -453,9 +483,11 @@ export default function HomeScreen() {
 
         {/* Contextual Action Banner */}
         <ActionBanner
-          leagues={leagues}
+          leagues={currentLeagues}
+          hasPastLeagues={pastLeagues.length > 0}
+          seasonNumber={season?.number ?? null}
           hasActiveCountdown={countdownActive}
-          nextEpisodeId={nextEpisode?.id ?? null}
+          episodes={episodes}
         />
 
         {/* Quick Actions */}
@@ -481,20 +513,35 @@ export default function HomeScreen() {
         </View>
 
         {/* Leagues */}
-        {leagues.length > 0 ? (
+        {currentLeagues.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>YOUR LEAGUES</Text>
+            <Text style={styles.sectionTitle}>
+              {season ? `SEASON ${season.number} LEAGUES` : 'YOUR LEAGUES'}
+            </Text>
             <View style={styles.leagueList}>
-              {leagues.map((league) => (
+              {currentLeagues.map((league) => (
                 <LeagueCardEnhanced key={league.id} league={league} />
               ))}
             </View>
           </View>
-        ) : (
+        )}
+        {currentLeagues.length === 0 && <GameModePreview />}
+        {pastLeagues.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>PAST SEASONS</Text>
+            <View style={styles.leagueList}>
+              {pastLeagues.map((league) => (
+                <LeagueCardEnhanced
+                  key={league.id}
+                  league={league}
+                  seasonNumber={seasonNumberById.get(league.season_id) ?? null}
+                />
+              ))}
+            </View>
+          </View>
+        )}
+        {leagues.length === 0 && (
           <View style={styles.emptySection}>
-            {/* Game mode preview cards for new users */}
-            <GameModePreview />
-
             <View style={styles.emptyCard}>
               <Ionicons name="people-outline" size={32} color="#2a2a4e" />
               <Text style={styles.emptyTitle}>No leagues yet</Text>

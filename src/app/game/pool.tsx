@@ -17,7 +17,7 @@ import { useAuthStore } from '../../stores/useAuthStore';
 import {
   getCastaways,
   getCastawaysAliveAtEpisode,
-  getActiveSeason,
+  getSeason,
   getLeague,
   getNextEpisode,
   getNextEpisodeFromStart,
@@ -54,6 +54,7 @@ export default function SurvivorPoolScreen() {
   >([]);
   const [isLocked, setIsLocked] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [leaguePicks, setLeaguePicks] = useState<
@@ -74,17 +75,23 @@ export default function SurvivorPoolScreen() {
     loadData();
   }, [authReady]);
 
+  // Picks lock at air time even if the screen was opened before it.
+  useEffect(() => {
+    if (!nextEpisode?.air_date || isLocked) return;
+    const interval = setInterval(() => {
+      if (isEpisodeLocked(nextEpisode.air_date)) setIsLocked(true);
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [nextEpisode, isLocked]);
+
   const loadData = async () => {
     try {
-      const season = await getActiveSeason();
-      if (!season) return;
-
-      // Fetch league to get start_episode
-      let startEp = 1;
-      if (leagueId) {
-        const league = await getLeague(leagueId);
-        if (league) startEp = league.start_episode;
-      }
+      if (!leagueId) throw new Error('Missing league');
+      const league = await getLeague(leagueId);
+      if (!league) throw new Error('League not found');
+      // Always the league's own season — old leagues must keep showing their season.
+      const season = await getSeason(league.season_id);
+      const startEp = league.start_episode;
 
       // Load castaways alive at start episode, then filter to currently alive
       const castawaysFetch = startEp > 1
@@ -193,8 +200,8 @@ export default function SurvivorPoolScreen() {
           setUsedIds(getUsedCastaways(picks));
         }
       }
-    } catch {
-      Alert.alert('Error', 'Failed to load pool data. Please try again.');
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : 'Failed to load pool data.');
     } finally {
       setIsLoading(false);
     }
@@ -207,6 +214,11 @@ export default function SurvivorPoolScreen() {
 
   const handleSave = async () => {
     if (!leagueId || !user || !nextEpisode || selectedId === null || isLocked) return;
+    if (isEpisodeLocked(nextEpisode.air_date)) {
+      setIsLocked(true);
+      Alert.alert('Picks Locked', `Episode ${nextEpisode.number} has started — picks are locked.`);
+      return;
+    }
     if (isFinale && winnerPickId === null) {
       Alert.alert('Pick a Winner', 'For the finale, you must also pick who you think will be the Sole Survivor.');
       return;
@@ -245,6 +257,41 @@ export default function SurvivorPoolScreen() {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#e94560" />
+      </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorText}>{loadError}</Text>
+        <Pressable
+          style={styles.retryButton}
+          onPress={() => {
+            setLoadError(null);
+            setIsLoading(true);
+            loadData();
+          }}
+        >
+          <Text style={styles.saveButtonText}>Try Again</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  if (isAlive && !nextEpisode) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.eliminatedEmoji}>🏆</Text>
+        <Text style={styles.eliminatedTitle}>Season Complete</Text>
+        <Text style={styles.eliminatedText}>
+          You outlasted the pool. {aliveCount} player{aliveCount === 1 ? '' : 's'} made it to the end.
+        </Text>
+        <View style={styles.statusBar}>
+          <Text style={styles.statusText}>
+            {aliveCount} alive / {eliminatedCount} eliminated
+          </Text>
+        </View>
       </View>
     );
   }
@@ -452,7 +499,7 @@ export default function SurvivorPoolScreen() {
                 {'\u2022'} The last fantasy player remaining in the pool wins. This is about YOU outlasting other players, not your castaways.{'\n\n'}
                 {'\u2022'} If an episode has multiple tribal councils, a castaway eliminated in ANY tribal counts as eliminated. Choose carefully on double-elimination episodes.{'\n\n'}
                 {'\u2022'} Picks lock when the episode airs. You can change your pick up until lock time.{'\n\n'}
-                {'\u2022'} Medevac or quit counts as an elimination.{'\n\n'}
+                {'\u2022'} Any exit counts as an elimination: vote, medevac, quit, fire-making, or losing the Million-Dollar Coin Toss.{'\n\n'}
                 {'\u2022'} Recap/reunion episodes with no tribal council require no pick.{'\n\n'}
                 {'\u2022'} In the finale, anyone who makes the Final 3 is NOT eliminated — they survive.{'\n\n'}
                 {'\u2022'} Tiebreaker: For the finale, you also pick who you think will be the Sole Survivor. If multiple players are tied, the one who correctly predicted the winner wins.
@@ -764,6 +811,14 @@ const styles = StyleSheet.create({
   errorText: {
     color: '#ff4757',
     fontSize: 16,
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 16,
+    backgroundColor: '#e94560',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
   },
   saveButton: {
     position: 'absolute',

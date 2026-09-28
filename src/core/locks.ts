@@ -27,6 +27,29 @@ export function isEpisodeLocked(
 }
 
 /**
+ * Air date that locks a league's season-long picks (its start episode).
+ * A league that starts at episode 1 locks at the premiere.
+ */
+export function getLeagueLockDate(
+  startEpisode: number,
+  episodes: { number: number; air_date: string | null }[],
+): string | null {
+  return episodes.find((e) => e.number === startEpisode)?.air_date ?? null;
+}
+
+/** First episode whose picks are still open, or null if the season is over. */
+export function getFirstOpenEpisode<T extends { number: number; air_date: string | null }>(
+  episodes: T[],
+  nowMs: number = Date.now(),
+): T | null {
+  return (
+    [...episodes]
+      .sort((a, b) => a.number - b.number)
+      .find((e) => e.air_date != null && !isEpisodeLocked(e.air_date, nowMs)) ?? null
+  );
+}
+
+/**
  * Get a human-readable lock deadline string.
  * Returns something like "Feb 25 at 8:00 PM ET"
  */
