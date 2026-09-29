@@ -117,6 +117,7 @@ round trip in the worst case.
 - **DON'T** write SQL that reads `episodes` without a season filter — `get_survivor_pool_standings` did, and scoring S51 ep 1 would have eliminated every S50 pool player
 - **DON'T** leave `seasons.winner_id` null at the finale — S50's +50 Sole Survivor bonus was never awarded because of it (sync-results now sets it from the wiki)
 - **DON'T** edit the deployed edge function in the dashboard — source of truth is `supabase/functions/sync-results/index.ts`
+- **DON'T** leave a finished season active through the off-season without guarding league creation — 123 leagues made for S51 got silently attached to finished S50 (fixed 2026-09-29 by moving them). `validate_new_league` now rejects start episodes that already aired, so creation fails loudly instead
 
 ## Survivor Show Edge Cases
 - **Double/Triple elimination**: Multiple tribals in one episode → all eliminations scored for that episode (ep 1, 5, 6 had multiples in S50)
