@@ -22,42 +22,71 @@ const APP_STORE_URL = 'https://apps.apple.com/app/id6759391126';
 
 const SUBJECT = 'Season 51 is live in Tribal Picks (sorry we were late!)';
 
-const TEXT = `Hi there,
+const PREHEADER = "Start a new league before Wednesday's episode. Nobody's behind.";
 
-If you downloaded Tribal Picks for Survivor 51 and found nothing to play, that's on us, and we're sorry. The app wasn't ready in time for the premiere.
+const TEXT = `Survivor 51 is here, and so is Tribal Picks.
 
-It's fixed. Season 51 is live now:
+We're sorry we were late. If you opened the app after the premiere and couldn't start the new season, that's on us. It's fixed now.
 
-- Start a Survivor Pool and make your Episode 2 pick before Wednesday at 8 PM ET
-- Or set an Elimination Bracket for the 20 castaways still in the game
+START YOUR SEASON 51 LEAGUE
+1. Open Tribal Picks and tap Create League
+2. Choose Survivor Pool or Elimination Bracket
+3. Share the invite code with your group
 
-Episode 1 is already in the books, so new leagues start with Episode 2. Nobody's behind.
+Make your Episode 2 picks before Wednesday at 8 PM ET. Episode 1 already aired, so every new league starts at Episode 2. Nobody's behind.
 
-Open Tribal Picks, tap Create League, and share the invite code with your group:
-${APP_STORE_URL}
+Played Season 50 with us? Your old leagues are saved, but each league covers one season. Create a new one for Season 51 and send your group the new code.
 
-An update with pick reminders is on its way too, so you never miss a lock.
+Open Tribal Picks: ${APP_STORE_URL}
+
+Tip: grab the app update when it shows up in the App Store. It adds reminders so you never miss a pick.
 
 Thanks for sticking with us,
 The Tribal Picks team
 
-You're receiving this because you have a Tribal Picks account. Questions? Reply to this email.`;
+You're getting this because you have a Tribal Picks account. Questions? Just reply.`;
 
-const HTML = `<!doctype html><html><body style="margin:0;background:#0f0f23;font-family:-apple-system,Helvetica,Arial,sans-serif;color:#e8e8f0">
-<div style="max-width:520px;margin:0 auto;padding:32px 24px">
-<h1 style="color:#e94560;font-size:22px;margin:0 0 20px">Season 51 is live 🔥</h1>
-<p style="line-height:1.55">If you downloaded Tribal Picks for Survivor 51 and found nothing to play, that's on us, and we're sorry. The app wasn't ready in time for the premiere.</p>
-<p style="line-height:1.55"><b>It's fixed.</b> Season 51 is live now:</p>
-<ul style="line-height:1.7;padding-left:20px">
-<li>Start a <b>Survivor Pool</b> and make your Episode 2 pick before <b>Wednesday at 8 PM ET</b></li>
-<li>Or set an <b>Elimination Bracket</b> for the 20 castaways still in the game</li>
-</ul>
-<p style="line-height:1.55">Episode 1 is already in the books, so new leagues start with Episode 2. Nobody's behind.</p>
-<p style="margin:28px 0"><a href="${APP_STORE_URL}" style="background:#e94560;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:bold">Open Tribal Picks</a></p>
-<p style="line-height:1.55">An update with pick reminders is on its way too, so you never miss a lock.</p>
-<p style="line-height:1.55">Thanks for sticking with us,<br>The Tribal Picks team</p>
-<p style="color:#777;font-size:12px;margin-top:32px">You're receiving this because you have a Tribal Picks account. Questions? Reply to this email.</p>
-</div></body></html>`;
+// Table layout + inline styles: the only thing Gmail/Outlook/iOS Mail all render reliably.
+const HTML = `<!doctype html>
+<html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"></head>
+<body style="margin:0;padding:0;background:#f3f3f6;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${PREHEADER}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f3f6;">
+<tr><td align="center" style="padding:32px 16px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#1f2130;">
+    <tr><td style="background:#1a1a2e;padding:20px 32px;">
+      <span style="color:#e94560;font-size:15px;font-weight:800;letter-spacing:2px;">🔥 TRIBAL PICKS</span>
+    </td></tr>
+    <tr><td style="padding:32px 32px 8px;">
+      <h1 style="margin:0 0 16px;font-size:26px;line-height:1.25;color:#1a1a2e;">Survivor 51 is here, and so is Tribal Picks.</h1>
+      <p style="margin:0 0 16px;font-size:16px;line-height:1.6;">We're sorry we were late. If you opened the app after the premiere and couldn't start the new season, that's on us. <b>It's fixed now.</b></p>
+    </td></tr>
+    <tr><td style="padding:8px 32px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f7f7fa;border-radius:12px;">
+        <tr><td style="padding:20px 24px;">
+          <p style="margin:0 0 12px;font-size:12px;font-weight:700;letter-spacing:1.5px;color:#e94560;">START YOUR SEASON 51 LEAGUE</p>
+          <p style="margin:0 0 8px;font-size:15px;line-height:1.5;"><b style="color:#e94560;">1.</b>&nbsp; Open Tribal Picks and tap <b>Create League</b></p>
+          <p style="margin:0 0 8px;font-size:15px;line-height:1.5;"><b style="color:#e94560;">2.</b>&nbsp; Choose <b>Survivor Pool</b> or <b>Elimination Bracket</b></p>
+          <p style="margin:0;font-size:15px;line-height:1.5;"><b style="color:#e94560;">3.</b>&nbsp; Share the invite code with your group</p>
+        </td></tr>
+      </table>
+    </td></tr>
+    <tr><td style="padding:16px 32px 0;">
+      <p style="margin:0 0 16px;font-size:16px;line-height:1.6;">Make your Episode 2 picks before <b>Wednesday at 8&nbsp;PM&nbsp;ET</b>. Episode 1 already aired, so every new league starts at Episode 2. Nobody's behind.</p>
+      <p style="margin:0 0 8px;font-size:16px;line-height:1.6;"><b>Played Season 50 with us?</b> Your old leagues are saved, but each league covers one season. Create a new one for Season 51 and send your group the new code.</p>
+    </td></tr>
+    <tr><td align="center" style="padding:24px 32px;">
+      <a href="${APP_STORE_URL}" style="display:inline-block;background:#e94560;color:#ffffff;text-decoration:none;font-size:16px;font-weight:700;padding:14px 32px;border-radius:12px;">Open Tribal Picks</a>
+    </td></tr>
+    <tr><td style="padding:0 32px 28px;">
+      <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#5b5e70;">Tip: grab the app update when it shows up in the App Store. It adds reminders so you never miss a pick.</p>
+      <p style="margin:0;font-size:16px;line-height:1.6;">Thanks for sticking with us,<br><b>The Tribal Picks team</b></p>
+    </td></tr>
+  </table>
+  <p style="margin:20px 0 0;font-family:-apple-system,Helvetica,Arial,sans-serif;font-size:12px;line-height:1.5;color:#8a8d9c;">You're getting this because you have a Tribal Picks account. Questions? Just reply.</p>
+</td></tr>
+</table>
+</body></html>`;
 
 const args = process.argv.slice(2);
 const argValue = (flag) => {
