@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import { useAuthStore } from '../../stores/useAuthStore';
 import { useLeagueStore } from '../../stores/useLeagueStore';
 import { useSeasonStore } from '../../stores/useSeasonStore';
 import { getBracketPicks, getSurvivorPoolPicks } from '../../services/supabase/queries';
-import { isBracketLocked, isEpisodeLocked } from '../../core/locks';
+import { getLeagueLockDate, isEpisodeLocked } from '../../core/locks';
 import PickStatusCard from '../../components/PickStatusCard';
 import AuthPrompt from '../../components/AuthPrompt';
 import type { GameType } from '../../core/types';
@@ -31,7 +31,7 @@ export default function PicksScreen() {
   const authLoading = useAuthStore((s) => s.isLoading);
   const authReady = useAuthStore((s) => s.authReady);
   const { leagues, fetchLeagues } = useLeagueStore();
-  const { season, nextEpisode, fetchSeason } = useSeasonStore();
+  const { season, episodes, fetchSeason } = useSeasonStore();
   const [pickStatuses, setPickStatuses] = useState<PickStatus[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -42,14 +42,20 @@ export default function PicksScreen() {
     }
   }, [user, authReady]);
 
+  // Only the current season's leagues need picks; past seasons live on the Leagues tab.
+  const currentLeagues = useMemo(
+    () => (season ? leagues.filter((l) => l.season_id === season.id) : []),
+    [leagues, season],
+  );
+
   useEffect(() => {
-    if (!user || !authReady || !leagues.length) {
+    if (!user || !authReady || !currentLeagues.length) {
       setPickStatuses([]);
       setIsLoading(false);
       return;
     }
     checkPickStatuses();
-  }, [user, authReady, leagues, season, nextEpisode]);
+  }, [user, authReady, currentLeagues, episodes]);
 
   const checkPickStatuses = async () => {
     if (!user) return;
@@ -57,11 +63,11 @@ export default function PicksScreen() {
 
     try {
       const statuses = await Promise.all(
-        leagues
+        currentLeagues
           .filter((l) => l.game_type === 'bracket' || l.game_type === 'survivor_pool')
           .map(async (league): Promise<PickStatus> => {
             if (league.game_type === 'bracket') {
-              const locked = isBracketLocked(season?.premiere_date ?? null);
+              const locked = isEpisodeLocked(getLeagueLockDate(league.start_episode, episodes));
               if (locked) {
                 return {
                   leagueId: league.id,
@@ -81,17 +87,10 @@ export default function PicksScreen() {
               };
             }
 
-            // survivor_pool
+            // survivor_pool — the next unscored episode at or after the league's start
+            const nextEpisode =
+              episodes.find((e) => !e.is_scored && e.number >= league.start_episode) ?? null;
             const locked = isEpisodeLocked(nextEpisode?.air_date ?? null);
-            if (locked && !nextEpisode) {
-              return {
-                leagueId: league.id,
-                leagueName: league.name,
-                gameType: league.game_type,
-                status: 'locked',
-                statusLabel: 'No upcoming episode',
-              };
-            }
             if (locked) {
               return {
                 leagueId: league.id,
@@ -119,14 +118,14 @@ export default function PicksScreen() {
               leagueName: league.name,
               gameType: league.game_type,
               status: 'locked',
-              statusLabel: 'No upcoming episode',
+              statusLabel: 'Season complete',
             };
           })
       );
 
       setPickStatuses(statuses);
     } catch {
-      // Silently fail — user sees empty state
+      // Keep the last known statuses rather than blanking the list on a network blip
     } finally {
       setIsLoading(false);
     }
@@ -181,10 +180,18 @@ export default function PicksScreen() {
           <View style={styles.emptyState}>
             <Text style={styles.emptyText}>No active picks</Text>
             <Text style={styles.emptySubtext}>
-              Join a league to start making picks for each episode
+              {season
+                ? `Create or join a Season ${season.number} league to start making picks`
+                : 'Join a league to start making picks for each episode'}
             </Text>
             <Pressable
               style={styles.joinButton}
+              onPress={() => router.push('/league/create')}
+            >
+              <Text style={styles.joinButtonText}>Create a League</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.joinButton, { marginTop: 12, backgroundColor: 'transparent', borderWidth: 1, borderColor: '#e94560' }]}
               onPress={() => router.push('/league/join')}
             >
               <Text style={styles.joinButtonText}>Join a League</Text>

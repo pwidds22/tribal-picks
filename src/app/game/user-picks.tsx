@@ -13,7 +13,7 @@ import {
   getEpisodes,
 } from '../../services/supabase/queries';
 import { useAuthStore } from '../../stores/useAuthStore';
-import { isEpisodeLocked } from '../../core/locks';
+import { getLeagueLockDate, isEpisodeLocked } from '../../core/locks';
 import type { BracketPick, Castaway, League } from '../../core/types';
 
 type PoolPickRow = {
@@ -31,8 +31,11 @@ export default function UserPicksScreen() {
   }>();
   const { leagueId, userId, userName, gameType } = params;
   const authReady = useAuthStore((s) => s.authReady);
+  const currentUserId = useAuthStore((s) => s.user?.id ?? null);
 
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [hiddenUntilLock, setHiddenUntilLock] = useState(false);
   const [bracketPicks, setBracketPicks] = useState<(BracketPick & { castaway_name: string; is_eliminated: boolean; elimination_order: number | null })[]>([]);
   const [bracketTotalPoints, setBracketTotalPoints] = useState<number>(0);
   const [episodeScores, setEpisodeScores] = useState<{ episode_number: number; episode_score: number }[]>([]);
@@ -48,14 +51,26 @@ export default function UserPicksScreen() {
   async function loadData() {
     if (!leagueId || !userId) return;
     setLoading(true);
+    setLoadError(null);
+    setHiddenUntilLock(false);
     try {
       const leagueData = await getLeague(leagueId);
       setLeague(leagueData);
 
       if (gameType === 'bracket') {
+        if (!leagueData) throw new Error('League not found');
+        // Other players' brackets stay hidden until the league locks
+        const seasonEpisodes = await getEpisodes(leagueData.season_id);
+        const locked = isEpisodeLocked(
+          getLeagueLockDate(leagueData.start_episode, seasonEpisodes),
+        );
+        if (!locked && userId !== currentUserId) {
+          setHiddenUntilLock(true);
+          return;
+        }
         const [picks, castaways, standings, epScores] = await Promise.all([
           getBracketPicks(leagueId, userId),
-          leagueData ? getCastaways(leagueData.season_id) : Promise.resolve([]),
+          getCastaways(leagueData.season_id),
           getBracketStandings(leagueId),
           getBracketEpisodeScores(leagueId, userId),
         ]);
@@ -91,8 +106,9 @@ export default function UserPicksScreen() {
         });
         setPoolHistory(lockedPicks);
       }
-    } catch {
-      // Fail silently — empty state will show
+    } catch (err) {
+      // Don't fall through to the empty state — "no picks" would be a lie
+      setLoadError(err instanceof Error ? err.message : 'Failed to load picks.');
     } finally {
       setLoading(false);
     }
@@ -122,7 +138,21 @@ export default function UserPicksScreen() {
         </View>
       </View>
 
-      {gameType === 'bracket' ? (
+      {loadError ? (
+        <View style={styles.center}>
+          <Text style={styles.noticeText}>Couldn't load picks: {loadError}</Text>
+          <Pressable style={styles.retryButton} onPress={loadData}>
+            <Text style={styles.retryText}>Try Again</Text>
+          </Pressable>
+        </View>
+      ) : hiddenUntilLock ? (
+        <View style={styles.center}>
+          <Ionicons name="lock-closed-outline" size={32} color="#666" />
+          <Text style={styles.noticeText}>
+            {displayName}'s bracket is hidden until the league locks.
+          </Text>
+        </View>
+      ) : gameType === 'bracket' ? (
         <BracketPicksList picks={bracketPicks} totalPoints={bracketTotalPoints} episodeScores={episodeScores} />
       ) : (
         <PoolPicksList picks={poolHistory} />
@@ -369,6 +399,24 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 24,
+    gap: 12,
+  },
+  noticeText: {
+    color: '#a0a0a0',
+    fontSize: 15,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#e94560',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
+  retryText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   header: {
     flexDirection: 'row',

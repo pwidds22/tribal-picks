@@ -17,6 +17,7 @@ import {
   isTransientAuthError,
 } from '../services/supabase/auth';
 import { useLeagueStore } from './useLeagueStore';
+import { unregisterPushToken } from '../services/notifications/push';
 
 type AuthState = {
   user: { id: string; email: string } | null;
@@ -115,6 +116,12 @@ export const useAuthStore = create<AuthState>()(
 
       signOut: async () => {
         set({ signingOut: true });
+        // Needs the session, so it must run before signing out; bounded so a
+        // slow network can't hold up sign-out.
+        await Promise.race([
+          unregisterPushToken().catch(() => {}),
+          new Promise((r) => setTimeout(r, 2000)),
+        ]);
         try {
           await Promise.race([
             authSignOut(),

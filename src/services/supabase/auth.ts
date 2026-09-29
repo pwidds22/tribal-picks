@@ -175,6 +175,9 @@ export function onAuthStateChange(
 export async function deleteAccount() {
   const { error } = await supabase.rpc('delete_own_account');
   if (error) throw error;
+  // The server user is gone; drop the stored tokens so a later refresh can't
+  // resurrect a session for the deleted account.
+  await signOutLocally().catch(() => {});
 }
 
 // ============================================

@@ -13,15 +13,38 @@ import type {
 // Seasons
 // ============================================
 
+/** The season currently open for new leagues. Null only if none is active. */
 export async function getActiveSeason(): Promise<Season | null> {
   const { data, error } = await supabase
     .from('seasons')
     .select('*')
     .eq('is_active', true)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
+/** A specific season — use the league's season_id, never the active season, for league screens. */
+export async function getSeason(seasonId: number): Promise<Season> {
+  const { data, error } = await supabase
+    .from('seasons')
+    .select('*')
+    .eq('id', seasonId)
     .single();
 
-  if (error) return null;
+  if (error) throw error;
   return data;
+}
+
+export async function getSeasons(): Promise<Season[]> {
+  const { data, error } = await supabase
+    .from('seasons')
+    .select('*')
+    .order('number', { ascending: false });
+
+  if (error) throw error;
+  return data ?? [];
 }
 
 // ============================================
@@ -358,6 +381,15 @@ export async function getPickSubmissionStatus(
   leagueId: string,
   episodeId: number
 ): Promise<string[]> {
+  // Preferred path: RPC that works once RLS hides other players' picks before lock.
+  const rpc = await supabase.rpc('get_pool_submissions', {
+    p_league_id: leagueId,
+    p_episode_id: episodeId,
+  });
+  if (!rpc.error) return (rpc.data ?? []) as string[];
+  // PGRST202 = function not deployed yet; fall back to the direct read.
+  if (rpc.error.code !== 'PGRST202') throw rpc.error;
+
   const { data, error } = await supabase
     .from('survivor_pool_picks')
     .select('user_id')

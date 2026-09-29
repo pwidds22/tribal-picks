@@ -4,17 +4,20 @@ import { GAME_TYPE_META } from '../core/gameTypes';
 
 type Props = {
   league: League;
+  /** Set for past-season leagues so they read as archived. */
+  seasonNumber?: number | null;
   onPress: () => void;
 };
 
-export default function LeagueCard({ league, onPress }: Props) {
+export default function LeagueCard({ league, seasonNumber = null, onPress }: Props) {
   const meta = GAME_TYPE_META[league.game_type];
-  const color = meta?.accentColor ?? '#e94560';
+  const color = seasonNumber != null ? '#666' : meta?.accentColor ?? '#e94560';
   return (
     <Pressable style={[styles.card, { borderLeftColor: color }]} onPress={onPress}>
       <Text style={styles.name}>{league.name}</Text>
       <Text style={[styles.gameType, { color }]}>
         {meta?.label ?? league.game_type}
+        {seasonNumber != null ? ` • Season ${seasonNumber}` : ''}
       </Text>
     </Pressable>
   );

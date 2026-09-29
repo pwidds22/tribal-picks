@@ -4,14 +4,30 @@ import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useAuthStore } from '../stores/useAuthStore';
+import {
+  addNotificationTapListener,
+  registerForPushNotifications,
+} from '../services/notifications/push';
 
 export default function RootLayout() {
   const initialize = useAuthStore((s) => s.initialize);
+  const userId = useAuthStore((s) => s.user?.id ?? null);
+  const authReady = useAuthStore((s) => s.authReady);
 
   useEffect(() => {
     const unsubscribe = initialize();
     return unsubscribe;
   }, [initialize]);
+
+  // Register for pushes once signed in (fire-and-forget; never blocks the UI)
+  useEffect(() => {
+    if (userId && authReady) registerForPushNotifications();
+  }, [userId, authReady]);
+
+  useEffect(
+    () => addNotificationTapListener((route) => router.push(route as never)),
+    [],
+  );
 
   return (
     <>

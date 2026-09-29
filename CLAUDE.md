@@ -1,14 +1,20 @@
 # Tribal Picks: Survivor Fantasy
 
 ## Project Overview
-iOS app (iPhone + iPad) for fantasy Survivor (CBS). Season 50 premiered Feb 25, 2026 — currently airing (6 episodes aired, 14 castaways remaining).
+iOS app (iPhone + iPad) for fantasy Survivor (CBS). Season 51 premiered Sep 23, 2026 (21 castaways, tribes Savu/Toka, 13 episodes, finale projected Dec 16). Season 50 is complete — its leagues remain as "past season" leagues.
+
+## Multi-Season Rules (STRICT)
+- A league belongs to ONE season: `leagues.season_id`. League screens (pool, bracket, user-picks) must load the season/castaways/episodes via `league.season_id` — NEVER `getActiveSeason()`.
+- The active season (`seasons.is_active`, exactly one row) only decides where NEW leagues go and what Home/Picks treat as "current". Flip seasons in ONE statement: `update seasons set is_active = (number = N)`.
+- New season checklist: seed castaways + name_aliases (full, first, wiki short name) + ALL episodes up front (sync-results detects the finale as max episode number), then flip is_active. Eps with unknown air dates must still get a projected date — pool locks key off `air_date`.
+- DB triggers enforce locks/season validity on picks; keep client and DB lock rules identical (8 PM America/New_York on air date).
 
 ## Tech Stack
 - **Framework**: React Native + Expo (SDK 54)
 - **Router**: Expo Router (file-based routing in `src/app/`)
 - **Backend**: Supabase (auth, PostgreSQL, real-time)
 - **State**: Zustand stores in `src/stores/`
-- **Monetization**: RevenueCat (subscriptions) + Google AdMob (ads)
+- **Monetization**: NOT implemented (planned: RevenueCat + AdMob — no packages, no code as of v1.0.16)
 - **Language**: TypeScript (strict mode)
 
 ## Game Types
@@ -107,6 +113,11 @@ round trip in the worst case.
 - **DON'T** read `authReady` via `getState()` inside effects — subscribe reactively and include it in deps, or the screen won't fetch when it flips (forces user to "click around" to load)
 - **DON'T** remove `startAutoRefresh()` from `client.ts` module scope — this is critical for auth persistence on cold starts
 - **DON'T** remove the bounded `global.fetch` wrapper in `client.ts` — without it a stalled iOS socket hangs 60+s and every query in the app queues behind it
+- **DON'T** use the active season inside a league screen — pool/bracket did this and would have shown S51 castaways inside every S50 league
+- **DON'T** write SQL that reads `episodes` without a season filter — `get_survivor_pool_standings` did, and scoring S51 ep 1 would have eliminated every S50 pool player
+- **DON'T** leave `seasons.winner_id` null at the finale — S50's +50 Sole Survivor bonus was never awarded because of it (sync-results now sets it from the wiki)
+- **DON'T** edit the deployed edge function in the dashboard — source of truth is `supabase/functions/sync-results/index.ts`
+- **DON'T** leave a finished season active through the off-season without guarding league creation — 123 leagues made for S51 got silently attached to finished S50 (fixed 2026-09-29 by moving them). `validate_new_league` now rejects start episodes that already aired, so creation fails loudly instead
 
 ## Survivor Show Edge Cases
 - **Double/Triple elimination**: Multiple tribals in one episode → all eliminations scored for that episode (ep 1, 5, 6 had multiples in S50)

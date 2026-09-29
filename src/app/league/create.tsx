@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useLeagueStore } from '../../stores/useLeagueStore';
 import { createLeague, getActiveSeason, getEpisodes } from '../../services/supabase/queries';
+import { getFirstOpenEpisode, isEpisodeLocked } from '../../core/locks';
 import type { GameType, Season, Episode } from '../../core/types';
 
 // ---------- Game Type Data ----------
@@ -50,8 +51,8 @@ const GAME_TYPES: GameTypeOption[] = [
     ],
     howItWorks: [
       {
-        step: 'Before premiere',
-        detail: 'Rank all castaways in your predicted elimination order',
+        step: 'Before your start episode',
+        detail: 'Rank the remaining castaways in your predicted elimination order',
       },
       {
         step: 'Each episode',
@@ -122,7 +123,7 @@ const GAME_TYPES: GameTypeOption[] = [
 const COMPARISON_ROWS = [
   {
     label: 'When to play',
-    bracket: 'Set before premiere',
+    bracket: 'Set before it starts',
     pool: 'Pick each episode',
   },
   {
@@ -371,21 +372,22 @@ export default function CreateLeagueScreen() {
 
   useEffect(() => {
     (async () => {
-      const season = await getActiveSeason();
-      if (!season) return;
-      setSeasonData(season);
+      try {
+        const season = await getActiveSeason();
+        if (!season) {
+          Alert.alert('No Active Season', 'There is no season open for new leagues right now.');
+          return;
+        }
+        setSeasonData(season);
 
-      const eps = await getEpisodes(season.id);
-      setEpisodes(eps);
+        const eps = await getEpisodes(season.id);
+        setEpisodes(eps);
 
-      // Smart default: episode 1 before premiere, next unscored after
-      const isBeforePremiere = season.premiere_date
-        ? Date.now() < new Date(season.premiere_date + 'T20:00:00-05:00').getTime()
-        : true;
-
-      if (!isBeforePremiere) {
-        const nextUnscored = eps.find((e) => !e.is_scored);
-        if (nextUnscored) setStartEpisode(nextUnscored.number);
+        // Default to the first episode whose picks haven't locked yet
+        const firstOpen = getFirstOpenEpisode(eps);
+        if (firstOpen) setStartEpisode(firstOpen.number);
+      } catch (err) {
+        Alert.alert('Error', err instanceof Error ? err.message : 'Failed to load the season.');
       }
     })();
   }, []);
@@ -397,6 +399,14 @@ export default function CreateLeagueScreen() {
     }
     if (!name.trim()) {
       Alert.alert('Error', 'Please enter a league name');
+      return;
+    }
+    const startEp = episodes.find((e) => e.number === startEpisode);
+    if (startEp && isEpisodeLocked(startEp.air_date)) {
+      Alert.alert(
+        'Episode Already Aired',
+        `Episode ${startEpisode} has already started. Choose a later start episode.`,
+      );
       return;
     }
 
@@ -480,7 +490,8 @@ export default function CreateLeagueScreen() {
             >
               {episodes.map((ep) => {
                 const isSelected = ep.number === startEpisode;
-                const isPast = ep.is_scored;
+                // Aired episodes can't be a start — their picks are already locked
+                const isPast = ep.is_scored || isEpisodeLocked(ep.air_date);
                 return (
                   <Pressable
                     key={ep.id}
@@ -490,6 +501,7 @@ export default function CreateLeagueScreen() {
                       isPast && !isSelected && epPickerStyles.chipPast,
                     ]}
                     onPress={() => setStartEpisode(ep.number)}
+                    disabled={isPast}
                   >
                     <Text
                       style={[

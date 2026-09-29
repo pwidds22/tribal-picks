@@ -46,3 +46,7 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Announcement email send log / recipient exports (contain user emails)
+scripts/.announcement-sent.json
+scripts/*.recipients.json

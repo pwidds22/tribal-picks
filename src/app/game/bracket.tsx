@@ -1,9 +1,11 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   SectionList,
+  PanResponder,
+  Animated,
   ScrollView,
   Pressable,
   ActivityIndicator,
@@ -20,7 +22,7 @@ import { useAuthStore } from '../../stores/useAuthStore';
 import {
   getCastaways,
   getCastawaysAliveAtEpisode,
-  getActiveSeason,
+  getSeason,
   getLeague,
   getEpisodeByNumber,
   saveBracketPicks,
@@ -357,6 +359,48 @@ function EditPickSheet({
   );
 }
 
+/**
+ * Grip that picks a bracket row up and drags it. Built on PanResponder so it
+ * needs no native animation library. Only the grip claims the touch, so the
+ * rest of the row still scrolls the list and taps still open the edit sheet.
+ */
+function DragHandle({
+  onStart,
+  onMove,
+  onEnd,
+}: {
+  onStart: () => void;
+  onMove: (dy: number) => void;
+  onEnd: (dy: number) => void;
+}) {
+  // PanResponder is created once; read the latest callbacks through a ref
+  const callbacks = useRef({ onStart, onMove, onEnd });
+  callbacks.current = { onStart, onMove, onEnd };
+
+  const responder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => callbacks.current.onStart(),
+      onPanResponderMove: (_, g) => callbacks.current.onMove(g.dy),
+      onPanResponderRelease: (_, g) => callbacks.current.onEnd(g.dy),
+      onPanResponderTerminate: (_, g) => callbacks.current.onEnd(g.dy),
+    }),
+  ).current;
+
+  return (
+    <View
+      {...responder.panHandlers}
+      style={styles.dragHandle}
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 4 }}
+      accessibilityLabel="Drag to reorder"
+    >
+      <Ionicons name="reorder-three" size={24} color="#777" />
+    </View>
+  );
+}
+
 /** Swap mode banner shown at the top when user is in "swap with..." mode */
 function SwapModeBanner({
   castaway,
@@ -391,6 +435,7 @@ export default function BracketScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
+  const [lockDate, setLockDate] = useState<string | null>(null);
 
   const [positionOffset, setPositionOffset] = useState(0);
 
@@ -412,25 +457,33 @@ export default function BracketScreen() {
     loadData();
   }, [authReady]);
 
+  // Brackets lock at air time even if the screen was opened before it.
+  useEffect(() => {
+    if (!lockDate || isLocked) return;
+    const interval = setInterval(() => {
+      if (isEpisodeLocked(lockDate)) setIsLocked(true);
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [lockDate, isLocked]);
+
   const loadData = async () => {
     try {
-      const season = await getActiveSeason();
-      if (!season) return;
+      if (!leagueId) throw new Error('Missing league');
+      const league = await getLeague(leagueId);
+      if (!league) throw new Error('League not found');
+      // Always the league's own season — old leagues must keep showing their season.
+      const season = await getSeason(league.season_id);
+      const startEp = league.start_episode;
 
-      // Fetch league to get start_episode
-      let startEp = 1;
-      if (leagueId) {
-        const league = await getLeague(leagueId);
-        if (league) startEp = league.start_episode;
-      }
-
-      // Determine lock time based on start episode
+      // Locks at the start episode's air time (the premiere for start_episode 1)
       let locked = false;
       if (startEp === 1) {
         locked = isBracketLocked(season.premiere_date);
+        setLockDate(season.premiere_date);
       } else {
         const episode = await getEpisodeByNumber(season.id, startEp);
         locked = episode ? isEpisodeLocked(episode.air_date) : true;
+        setLockDate(episode?.air_date ?? null);
       }
       setIsLocked(locked);
 
@@ -461,8 +514,11 @@ export default function BracketScreen() {
         const members = await getLeagueMembers(leagueId);
         setLeagueMembers(members);
       }
-    } catch {
-      Alert.alert('Error', 'Failed to load bracket data. Please try again.');
+    } catch (err) {
+      Alert.alert(
+        'Error',
+        err instanceof Error ? `Failed to load bracket: ${err.message}` : 'Failed to load bracket data. Please try again.',
+      );
     } finally {
       setIsLoading(false);
     }
@@ -549,6 +605,74 @@ export default function BracketScreen() {
     [],
   );
 
+  // --- DRAG TO REORDER ---
+  // The dragged row is drawn as a floating copy (the list's cells can't
+  // overlap each other); the original stays as a faded placeholder and the
+  // rows in between slide one slot to make room.
+  const containerRef = useRef<View>(null);
+  const rowRefs = useRef(new Map<number, View>());
+  const dragDy = useRef(new Animated.Value(0)).current;
+  const [drag, setDrag] = useState<{
+    index: number;
+    top: number;
+    left: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const dragRef = useRef(drag);
+  dragRef.current = drag;
+
+  const dragTarget = (index: number, height: number, dy: number) =>
+    Math.max(0, Math.min(pickedIds.length - 1, index + Math.round(dy / height)));
+
+  // Measuring is async: a quick tap can release before it resolves, so only
+  // show the drag if the finger is still down.
+  const gestureActive = useRef(false);
+
+  const handleDragStart = useCallback((index: number) => {
+    const row = rowRefs.current.get(index);
+    const container = containerRef.current;
+    if (!row || !container) return;
+    gestureActive.current = true;
+    dragDy.setValue(0);
+    container.measureInWindow((cx, cy) => {
+      row.measureInWindow((rx, ry, width, height) => {
+        if (!gestureActive.current || height <= 0) return;
+        setDrag({ index, top: ry - cy, left: rx - cx, width, height });
+        setHoverIndex(index);
+      });
+    });
+  }, [dragDy]);
+
+  const handleDragMove = useCallback((dy: number) => {
+    dragDy.setValue(dy);
+    const d = dragRef.current;
+    if (!d) return;
+    const target = dragTarget(d.index, d.height, dy);
+    setHoverIndex((prev) => (prev === target ? prev : target));
+  }, [dragDy, pickedIds.length]);
+
+  const handleDragEnd = useCallback((dy: number) => {
+    gestureActive.current = false;
+    const d = dragRef.current;
+    setDrag(null);
+    setHoverIndex(null);
+    if (!d) return;
+    const target = dragTarget(d.index, d.height, dy);
+    if (target !== d.index) handleMoveToPosition(d.index, target);
+  }, [handleMoveToPosition, pickedIds.length]);
+
+  /** How far a non-dragged row slides to open a gap at the hover slot. */
+  const dragShift = (index: number): number => {
+    if (!drag || hoverIndex === null || index === drag.index) return 0;
+    if (drag.index < hoverIndex && index > drag.index && index <= hoverIndex) return -drag.height;
+    if (drag.index > hoverIndex && index >= hoverIndex && index < drag.index) return drag.height;
+    return 0;
+  };
+
+  const canDrag = !isLocked && swapSourceIndex === null && !viewingUserId && pickedIds.length > 1;
+
   /** Enter swap mode: user will tap another pick to swap with */
   const handleEnterSwapMode = useCallback(() => {
     if (editingIndex === null) return;
@@ -584,6 +708,11 @@ export default function BracketScreen() {
 
   const handleSave = async () => {
     if (!leagueId || !user || isLocked || !allPicked) return;
+    if (lockDate && isEpisodeLocked(lockDate)) {
+      setIsLocked(true);
+      Alert.alert('Bracket Locked', 'The episode has started — brackets are locked.');
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -706,7 +835,7 @@ export default function BracketScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} ref={containerRef}>
       {/* Swap mode banner */}
       {swapSourceCastaway && (
         <SwapModeBanner
@@ -729,8 +858,8 @@ export default function BracketScreen() {
               : pickedIds.length === 0
                 ? "Tap castaways in the order you think they'll be eliminated"
                 : allPicked
-                  ? 'All set! Review your bracket and save.'
-                  : `Pick who goes out #${pickedIds.length + 1 + positionOffset}`}
+                  ? 'All set! Hold ≡ and drag to reorder, then save.'
+                  : `Pick who goes out #${pickedIds.length + 1 + positionOffset}${pickedIds.length > 1 ? ' · drag ≡ to reorder' : ''}`}
           </Text>
           <Pressable onPress={() => setShowScoring(true)} hitSlop={12}>
             <Ionicons name="information-circle-outline" size={20} color="#a0a0a0" />
@@ -817,17 +946,34 @@ export default function BracketScreen() {
               swapSourceIndex !== null && !isSwapSource;
             const label = getPositionLabel(item.index);
 
+            const isDragging = drag?.index === item.index;
+            const shift = dragShift(item.index);
+
             return (
               <Pressable
+                ref={(r) => {
+                  // Never delete on unmount: reorders re-key rows, and a
+                  // late null would wipe the slot another row just claimed
+                  if (r) rowRefs.current.set(item.index, r);
+                }}
                 style={[
                   styles.pickedRow,
                   isWinner && styles.winnerRow,
                   isSwapSource && styles.swapSourceRow,
                   isSwapTarget && styles.swapTargetRow,
+                  isDragging && styles.dragPlaceholderRow,
+                  shift !== 0 && { transform: [{ translateY: shift }] },
                 ]}
                 onPress={() => handlePickedTap(item.index)}
-                disabled={isLocked}
+                disabled={isLocked || drag !== null}
               >
+                {canDrag && (
+                  <DragHandle
+                    onStart={() => handleDragStart(item.index)}
+                    onMove={handleDragMove}
+                    onEnd={handleDragEnd}
+                  />
+                )}
                 <View
                   style={[
                     styles.positionBadge,
@@ -951,7 +1097,49 @@ export default function BracketScreen() {
         }}
         contentContainerStyle={styles.listContent}
         stickySectionHeadersEnabled
+        scrollEnabled={drag === null}
       />
+
+      {/* Floating copy of the row being dragged */}
+      {drag && (() => {
+        const castaway = castawayMap.get(pickedIds[drag.index]);
+        if (!castaway) return null;
+        const slot = hoverIndex ?? drag.index;
+        return (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.pickedRow,
+              styles.dragGhost,
+              {
+                top: drag.top,
+                left: drag.left,
+                width: drag.width,
+                height: drag.height,
+                transform: [{ translateY: dragDy }],
+              },
+            ]}
+          >
+            <View style={styles.dragHandle}>
+              <Ionicons name="reorder-three" size={24} color="#e94560" />
+            </View>
+            <View style={styles.positionBadge}>
+              <Text style={styles.positionNumber}>{slot + 1 + positionOffset}</Text>
+            </View>
+            {castaway.photo_url ? (
+              <Image source={{ uri: castaway.photo_url }} style={styles.photo} />
+            ) : (
+              <View style={styles.photoPlaceholder}>
+                <Ionicons name="person" size={16} color="#666" />
+              </View>
+            )}
+            <View style={styles.pickedInfo}>
+              <Text style={styles.pickedName}>{castaway.name}</Text>
+              <Text style={styles.positionLabel}>{getPositionLabel(slot)}</Text>
+            </View>
+          </Animated.View>
+        );
+      })()}
 
       {/* Save button */}
       {!isLocked && allPicked && (
@@ -1153,6 +1341,26 @@ const styles = StyleSheet.create({
   winnerRow: {
     backgroundColor: '#1a1025',
     borderBottomColor: '#2a1a3e',
+  },
+  dragHandle: {
+    paddingRight: 8,
+    marginLeft: -6,
+    justifyContent: 'center',
+  },
+  dragPlaceholderRow: {
+    opacity: 0.25,
+  },
+  dragGhost: {
+    position: 'absolute',
+    backgroundColor: '#1f1f40',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e94560',
+    shadowColor: '#000',
+    shadowOpacity: 0.5,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 12,
   },
   swapSourceRow: {
     backgroundColor: '#1e1040',

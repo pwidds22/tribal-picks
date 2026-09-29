@@ -1,9 +1,10 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import {
   View,
   Text,
   StyleSheet,
-  FlatList,
+  SectionList,
   Pressable,
   RefreshControl,
   ActivityIndicator,
@@ -12,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useLeagueStore } from '../../stores/useLeagueStore';
+import { useSeasonStore } from '../../stores/useSeasonStore';
 import LeagueCard from '../../components/LeagueCard';
 import AuthPrompt from '../../components/AuthPrompt';
 import type { League } from '../../core/types';
@@ -21,8 +23,11 @@ export default function LeaguesScreen() {
   const authLoading = useAuthStore((s) => s.isLoading);
   const authReady = useAuthStore((s) => s.authReady);
   const { leagues, isLoading, error, fetchLeagues, invalidate } = useLeagueStore();
+  const { season, seasons, fetchSeason } = useSeasonStore();
+  const [showPast, setShowPast] = useState(false);
 
   useEffect(() => {
+    fetchSeason();
     if (user && authReady) fetchLeagues(user.id);
   }, [user, authReady]);
 
@@ -101,17 +106,46 @@ export default function LeaguesScreen() {
     </View>
   );
 
+  const seasonNumberById = new Map(seasons.map((s) => [s.id, s.number]));
+  const currentLeagues = leagues.filter((l) => !season || l.season_id === season.id);
+  const pastLeagues = season ? leagues.filter((l) => l.season_id !== season.id) : [];
+  // Past leagues are finished; keep them one tap away instead of crowding the list
+  const sections = [
+    ...(currentLeagues.length > 0
+      ? [{ key: 'current', title: season ? `Season ${season.number}` : 'Current Season', data: currentLeagues }]
+      : []),
+    ...(pastLeagues.length > 0
+      ? [{ key: 'past', title: `Past Seasons (${pastLeagues.length})`, data: showPast ? pastLeagues : [] }]
+      : []),
+  ];
+
   return (
     <SafeAreaView style={styles.container}>
-      <FlatList<League>
-        data={leagues}
+      <SectionList<League, { key: string; title: string }>
+        sections={sections}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <LeagueCard
             league={item}
+            seasonNumber={season && item.season_id !== season.id ? seasonNumberById.get(item.season_id) ?? null : null}
             onPress={() => router.push(`/league/${item.id}`)}
           />
         )}
+        renderSectionHeader={({ section }) =>
+          section.key === 'past' ? (
+            <Pressable
+              style={styles.pastToggle}
+              onPress={() => setShowPast((v) => !v)}
+              hitSlop={8}
+            >
+              <Text style={styles.sectionTitle}>{section.title}</Text>
+              <Ionicons name={showPast ? 'chevron-up' : 'chevron-down'} size={16} color="#a0a0a0" />
+            </Pressable>
+          ) : sections.length > 1 ? (
+            <Text style={styles.sectionTitle}>{section.title}</Text>
+          ) : null
+        }
+        stickySectionHeadersEnabled={false}
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={renderEmpty}
         contentContainerStyle={styles.content}
@@ -146,6 +180,20 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#ffffff',
     marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: '#a0a0a0',
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  pastToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   buttonRow: {
     flexDirection: 'row',
