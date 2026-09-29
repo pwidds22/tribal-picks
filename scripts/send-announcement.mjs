@@ -37,7 +37,8 @@ Make your Episode 2 picks before Wednesday at 8 PM ET. Episode 1 already aired, 
 
 Played Season 50 with us? Your old leagues are saved, but each league covers one season. Create a new one for Season 51 and send your group the new code.
 
-Open Tribal Picks: ${APP_STORE_URL}
+Get Tribal Picks on the App Store (free, and it opens the app if you already have it):
+${APP_STORE_URL}
 
 Tip: grab the app update when it shows up in the App Store. It adds reminders so you never miss a pick.
 
@@ -75,8 +76,11 @@ const HTML = `<!doctype html>
       <p style="margin:0 0 16px;font-size:16px;line-height:1.6;">Make your Episode 2 picks before <b>Wednesday at 8&nbsp;PM&nbsp;ET</b>. Episode 1 already aired, so every new league starts at Episode 2. Nobody's behind.</p>
       <p style="margin:0 0 8px;font-size:16px;line-height:1.6;"><b>Played Season 50 with us?</b> Your old leagues are saved, but each league covers one season. Create a new one for Season 51 and send your group the new code.</p>
     </td></tr>
-    <tr><td align="center" style="padding:24px 32px;">
-      <a href="${APP_STORE_URL}" style="display:inline-block;background:#e94560;color:#ffffff;text-decoration:none;font-size:16px;font-weight:700;padding:14px 32px;border-radius:12px;">Open Tribal Picks</a>
+    <tr><td align="center" style="padding:24px 32px 8px;">
+      <a href="${APP_STORE_URL}" style="display:inline-block;background:#e94560;color:#ffffff;text-decoration:none;font-size:16px;font-weight:700;padding:14px 32px;border-radius:12px;">Get Tribal Picks on the App Store</a>
+    </td></tr>
+    <tr><td align="center" style="padding:0 32px 20px;">
+      <p style="margin:0;font-size:13px;line-height:1.5;color:#8a8d9c;">Already have it? The same link opens the app. Deleted it? It's a free download.</p>
     </td></tr>
     <tr><td style="padding:0 32px 28px;">
       <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#5b5e70;">Tip: grab the app update when it shows up in the App Store. It adds reminders so you never miss a pick.</p>

@@ -390,6 +390,7 @@ export default function HomeScreen() {
   const { season, seasons, episodes, nextEpisode, fetchSeason } = useSeasonStore();
 
   const [countdownActive, setCountdownActive] = useState(false);
+  const [showPast, setShowPast] = useState(false);
 
   const currentLeagues = useMemo(
     () => (season ? leagues.filter((l) => l.season_id === season.id) : leagues),
@@ -528,16 +529,27 @@ export default function HomeScreen() {
         {currentLeagues.length === 0 && <GameModePreview />}
         {pastLeagues.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>PAST SEASONS</Text>
-            <View style={styles.leagueList}>
-              {pastLeagues.map((league) => (
-                <LeagueCardEnhanced
-                  key={league.id}
-                  league={league}
-                  seasonNumber={seasonNumberById.get(league.season_id) ?? null}
-                />
-              ))}
-            </View>
+            <Pressable
+              style={styles.pastToggle}
+              onPress={() => setShowPast((v) => !v)}
+              hitSlop={8}
+            >
+              <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>
+                PAST SEASONS ({pastLeagues.length})
+              </Text>
+              <Ionicons name={showPast ? 'chevron-up' : 'chevron-down'} size={16} color="#666" />
+            </Pressable>
+            {showPast && (
+              <View style={[styles.leagueList, { marginTop: 12 }]}>
+                {pastLeagues.map((league) => (
+                  <LeagueCardEnhanced
+                    key={league.id}
+                    league={league}
+                    seasonNumber={seasonNumberById.get(league.season_id) ?? null}
+                  />
+                ))}
+              </View>
+            )}
           </View>
         )}
         {leagues.length === 0 && (
@@ -665,6 +677,12 @@ const styles = StyleSheet.create({
     color: '#e94560',
     letterSpacing: 1,
     marginBottom: 4,
+  },
+  pastToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
   },
   leagueList: {
     gap: 8,
