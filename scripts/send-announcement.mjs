@@ -4,14 +4,19 @@
 //   $env:SUPABASE_SERVICE_ROLE_KEY="..."; $env:RESEND_API_KEY="..."
 //   node scripts/send-announcement.mjs            # dry run: counts + preview, sends nothing
 //   node scripts/send-announcement.mjs --test you@example.com   # one real email to you
-//   node scripts/send-announcement.mjs --send     # everyone
+//   node scripts/send-announcement.mjs --send     # next 100, newest signups first
+//   node scripts/send-announcement.mjs --send --limit 200   # if on a paid Resend plan
+//   ...add --recipients users.json to read [{email, created_at}] instead of the admin API
+// Re-run --send daily; scripts/.announcement-sent.json tracks who already got it.
 //
 // Prereqs: tribalpicks.com verified in Resend (DNS records), and the domain
 // registered in Apple Developer > Services > "Sign in with Apple for Email
 // Communication" — otherwise the ~35% of users on @privaterelay.appleid.com
 // addresses silently never receive it.
 
-const SUPABASE_URL = 'https://mwktbcoxrfpadhzfnnma.supabase.co';
+import { readFile, writeFile } from 'node:fs/promises';
+
+const SUPABASE_URL ='https://mwktbcoxrfpadhzfnnma.supabase.co';
 const FROM = 'Tribal Picks <support@tribalpicks.com>';
 const APP_STORE_URL = 'https://apps.apple.com/app/id6759391126';
 
@@ -55,9 +60,18 @@ const HTML = `<!doctype html><html><body style="margin:0;background:#0f0f23;font
 </div></body></html>`;
 
 const args = process.argv.slice(2);
-const testIdx = args.indexOf('--test');
-const testTo = testIdx >= 0 ? args[testIdx + 1] : null;
+const argValue = (flag) => {
+  const i = args.indexOf(flag);
+  return i >= 0 ? args[i + 1] : null;
+};
+const testTo = argValue('--test');
 const sendAll = args.includes('--send');
+// Resend free plan = 100 emails/day. Each run sends up to --limit, newest
+// signups first, and records who was sent so the next run resumes.
+const limit = Number(argValue('--limit') ?? 100);
+// Optional: JSON array of {email, created_at} instead of the Supabase admin API
+const recipientsFile = argValue('--recipients');
+const SENT_LOG = new URL('./.announcement-sent.json', import.meta.url);
 
 function need(name) {
   const v = process.env[name];
@@ -65,18 +79,36 @@ function need(name) {
   return v;
 }
 
-async function listEmails(serviceKey) {
-  const emails = [];
-  for (let page = 1; ; page++) {
-    const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?page=${page}&per_page=1000`, {
-      headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
-    });
-    if (!res.ok) throw new Error(`Supabase admin API ${res.status}: ${await res.text()}`);
-    const { users } = await res.json();
-    for (const u of users) if (u.email) emails.push(u.email);
-    if (users.length < 1000) break;
+/** All account emails, newest signup first. */
+async function listEmails() {
+  let users;
+  if (recipientsFile) {
+    users = JSON.parse(await readFile(recipientsFile, 'utf8'));
+  } else {
+    const serviceKey = need('SUPABASE_SERVICE_ROLE_KEY');
+    users = [];
+    for (let page = 1; ; page++) {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?page=${page}&per_page=1000`, {
+        headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+      });
+      if (!res.ok) throw new Error(`Supabase admin API ${res.status}: ${await res.text()}`);
+      const page_ = (await res.json()).users;
+      users.push(...page_);
+      if (page_.length < 1000) break;
+    }
   }
-  return [...new Set(emails.map((e) => e.toLowerCase()))];
+  const sorted = users
+    .filter((u) => u.email)
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  return [...new Set(sorted.map((u) => u.email.toLowerCase()))];
+}
+
+async function readSentLog() {
+  try {
+    return new Set(JSON.parse(await readFile(SENT_LOG, 'utf8')));
+  } catch {
+    return new Set();
+  }
 }
 
 async function sendBatch(resendKey, to) {
@@ -96,9 +128,15 @@ async function main() {
     return;
   }
 
-  const emails = await listEmails(need('SUPABASE_SERVICE_ROLE_KEY'));
+  const emails = await listEmails();
+  const sent = await readSentLog();
+  const pending = emails.filter((e) => !sent.has(e));
+  const todays = pending.slice(0, limit);
   const relay = emails.filter((e) => e.endsWith('@privaterelay.appleid.com')).length;
-  console.log(`${emails.length} recipients (${relay} Apple private relay)`);
+  console.log(
+    `${emails.length} accounts (${relay} Apple private relay) — ${sent.size} already sent, ` +
+    `${pending.length} left, this run: ${todays.length}`,
+  );
 
   if (!sendAll) {
     console.log(`\nDRY RUN — nothing sent. Subject: ${SUBJECT}\n\n${TEXT}\n\nRe-run with --send to deliver.`);
@@ -106,12 +144,16 @@ async function main() {
   }
 
   const resendKey = need('RESEND_API_KEY');
-  for (let i = 0; i < emails.length; i += 100) {
-    await sendBatch(resendKey, emails.slice(i, i + 100));
-    console.log(`Sent ${Math.min(i + 100, emails.length)}/${emails.length}`);
+  for (let i = 0; i < todays.length; i += 100) {
+    const batch = todays.slice(i, i + 100);
+    await sendBatch(resendKey, batch);
+    batch.forEach((e) => sent.add(e));
+    // Log after every batch so a crash never causes a double-send
+    await writeFile(SENT_LOG, JSON.stringify([...sent], null, 2));
+    console.log(`Sent ${Math.min(i + 100, todays.length)}/${todays.length}`);
     await new Promise((r) => setTimeout(r, 600)); // stay under Resend's 2 req/s
   }
-  console.log('Done.');
+  console.log(`Done. ${pending.length - todays.length} left for the next run.`);
 }
 
 main().catch((e) => {
