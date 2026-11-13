@@ -50,3 +50,17 @@ yarn-error.*
 # Announcement email send log / recipient exports (contain user emails)
 scripts/.announcement-sent.json
 scripts/*.recipients.json
+
+# Build output
+build/
+*.ipa
+*.apk
+*.aab
+coverage/
+
+# Private working notes (session logs, handoffs, research) — kept local only
+_SESSION.md
+_HANDOFF.md
+_ROADMAP.md
+.claude/research/
+.claude/worktrees/

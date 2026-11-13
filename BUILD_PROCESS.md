@@ -77,7 +77,7 @@ This takes ~10-15 minutes. EAS builds the binary in the cloud and uploads it to 
 eas submit --platform ios
 ```
 
-This submits the build to App Store Connect. Apple processes it (usually 5-30 minutes), then it appears in TestFlight.
+This submits the build to App Store Connect. The Apple ID is not stored in `eas.json`. Set it in the `EXPO_APPLE_ID` environment variable, or let EAS use the App Store Connect API key saved on your Expo account. Apple processes it (usually 5-30 minutes), then it appears in TestFlight.
 
 ### Step 5: Test on TestFlight
 

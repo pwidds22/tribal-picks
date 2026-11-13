@@ -5,8 +5,7 @@
   "submit": {
     "production": {
       "ios": {
-        "ascAppId": "6759391126",
-        "appleId": "REMOVED"
+        "ascAppId": "6759391126"
       }
     }
   },
